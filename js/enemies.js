@@ -29,17 +29,16 @@ export class Enemies {
       if (G.world.isOpenWater(x, z, 30)) break;
     }
     const heading = Math.atan2(-(P.pos.x - x), -(P.pos.z - z));
-    const s = new Ship(G.scene, { x, z, heading, maxSpeed: 7.6, turnRate: 0.22, health: 100, sail: 1, reloadTime: 9 });
+    const s = new Ship(G.scene, { id: G.ids.next('ship'), x, z, heading, maxSpeed: 7.6, turnRate: 0.22, health: 100, sail: 1, reloadTime: 9 });
     s.ai = { canBoard: this.ships.length === 0 && G.score === 0 ? true : Math.random() < 0.6, mode: 'approach', inRangeT: 0, boardT: 3, sent: 0 };
     const spots = [[-1.3, -2.2], [1.4, -3.6], [0.9, 2.6], [-0.8, -5.2], [-1.2, 3.4]];
     for (let i = 0; i < 4; i++) {
       const p = makePerson(LOOKS[i % LOOKS.length]);
       p.g.position.set(spots[i][0], 0, spots[i][1]); s.root.add(p.g);
-      s.crew.push({ p });
+      s.crew.push({ id: `${s.id}/crew:${i}`, p });
     }
     this.ships.push(s);
-    G.hud.msg(this.ships.length > 1 ? 'Another sail on the horizon!' : 'Enemy ship sighted!', 3.5);
-    G.audio.bell();
+    G.events.emit('enemySpawned', { ship: s, count: this.ships.length });
   }
 
   clearAll() {
@@ -90,8 +89,8 @@ export class Enemies {
       else if (e.cannonReady(c) && P.alive && Math.random() < dt * 1.5) e.lightCannon(c, rand(0.2, 0.7));
     }
 
-    // Boarding
-    if (A.mode === 'board' && dist < 24 && P.alive && !G.player.dead) {
+    // Boarding (only while someone is alive on deck to fight them)
+    if (A.mode === 'board' && dist < 24 && P.alive && G.players.some((pl) => !pl.dead)) {
       A.boardT -= dt;
       const live = this.boarders.filter((b) => b.state !== 'dead').length;
       if (A.boardT <= 0 && live < 3 && A.sent < 5) { A.boardT = rand(4, 7); A.sent++; this.spawnBoarder(e); }
@@ -106,10 +105,9 @@ export class Enemies {
     const p = makePerson(LOOKS[Math.floor(Math.random() * LOOKS.length)]);
     const from = new THREE.Vector3(side * 5, 2.8, z), to = new THREE.Vector3(side * (halfWidth(z) - 0.8), 0, z);
     p.g.position.copy(from); P.root.add(p.g);
-    this.boarders.push({ p, state: 'jump', t: 0, from, to, hp: 2, atkCD: rand(0.6, 1.2), hitCD: 0, swingHit: true });
-    G.audio.swoosh(e.root.position);
-    if (!this.warnedBoard) { this.warnedBoard = true; G.hud.msg('Boarders! Grab the sword or a musket!', 4); }
-    else G.hud.msg('More boarders!', 2);
+    this.boarders.push({ id: G.ids.next('boarder'), p, state: 'jump', t: 0, from, to, hp: 2, atkCD: rand(0.6, 1.2), hitCD: 0, swingHit: true });
+    G.events.emit('boarderSpawned', { ship: e, first: !this.warnedBoard });
+    this.warnedBoard = true;
   }
 
   hitBoarder(b, dmg, kx, kz) {
@@ -124,11 +122,24 @@ export class Enemies {
   killBoarder(b) {
     if (b.state === 'dead') return;
     b.state = 'dead'; b.p.dead = true; b.p.deadT = 0; b.deadT = 0;
-    if (this.boarders.every((x) => x.state === 'dead')) this.G.hud.msg('Deck cleared!', 2);
+    this.G.events.emit('boarderKilled', { boarder: b });
+    if (this.boarders.every((x) => x.state === 'dead')) this.G.events.emit('deckCleared');
+  }
+
+  // The player a boarder goes after: the nearest one still standing
+  // (or, if everyone is down, the nearest one, just to look at).
+  boarderTarget(pos) {
+    let best = null, bd = Infinity, any = null, ad = Infinity;
+    for (const pl of this.G.players) {
+      const d = Math.hypot(pl.headLocal.x - pos.x, pl.headLocal.z - pos.z);
+      if (d < ad) { ad = d; any = pl; }
+      if (!pl.dead && d < bd) { bd = d; best = pl; }
+    }
+    return best || any;
   }
 
   updateBoarders(dt, t) {
-    const G = this.G, head = G.player.headLocal;
+    const G = this.G;
     for (let i = this.boarders.length - 1; i >= 0; i--) {
       const b = this.boarders[i], p = b.p, pos = p.g.position;
       b.hitCD -= dt;
@@ -146,11 +157,12 @@ export class Enemies {
         if (b.deadT > 4) { G.ship.root.remove(p.g); this.boarders.splice(i, 1); }
         continue;
       }
-      // Fight: close in on the player and swing
+      // Fight: close in on a player and swing
+      const victim = this.boarderTarget(pos), head = victim.headLocal, canFight = !victim.dead;
       const dx = head.x - pos.x, dz = head.z - pos.z, d = Math.hypot(dx, dz);
       facePerson(p, dx, dz, dt);
       let moving = false;
-      if (d > 1.05 && p.attack < 0 && !G.player.dead) {
+      if (d > 1.05 && p.attack < 0 && canFight) {
         const sp = 1.8 * dt / d; pos.x += dx * sp; pos.z += dz * sp; moving = true;
       }
       for (const o of this.boarders) {
@@ -161,11 +173,11 @@ export class Enemies {
       const zc = clamp(pos.z, -8.4, 6.9), hw = halfWidth(zc) - 0.4;
       pos.z = zc; pos.x = clamp(pos.x, -hw, hw); pos.y = 0;
       b.atkCD -= dt;
-      if (d < 1.45 && b.atkCD <= 0 && p.attack < 0 && !G.player.dead) { p.attack = 0; b.swingHit = false; b.atkCD = rand(1.4, 2.1); }
+      if (d < 1.45 && b.atkCD <= 0 && p.attack < 0 && canFight) { p.attack = 0; b.swingHit = false; b.atkCD = rand(1.4, 2.1); }
       if (p.attack > 0.62 && !b.swingHit) {
         b.swingHit = true;
-        _a.set(pos.x, 1.3, pos.z); G.ship.root.localToWorld(_a); G.audio.swoosh(_a);
-        if (d < 1.7) G.player.hurt(10);
+        _a.set(pos.x, 1.3, pos.z); G.ship.root.localToWorld(_a); G.events.emit('boarderSwing', { pos: _a });
+        if (d < 1.7) G.hurtPlayer(victim, 10);
       }
       animatePerson(p, dt, moving, t);
     }

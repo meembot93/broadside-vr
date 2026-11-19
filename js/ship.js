@@ -13,6 +13,8 @@ export function halfWidth(z) {
   return 3.2 * Math.sqrt(Math.max(0, 1 - u * u));
 }
 export const BALL_SPEED = 55;
+export const WHEEL_MAX = Math.PI * 2; // one full turn of the wheel = full rudder
+export const LEVER_MAX = 0.6;         // sail lever swings from -0.6 (full sail) to +0.6 (sails furled)
 const LAMP_GEO = new THREE.SphereGeometry(0.06, 10, 8);
 const LAMP_READY = new THREE.MeshBasicMaterial({ color: 0x40ff60 });
 const LAMP_EMPTY = new THREE.MeshBasicMaterial({ color: 0xff3020 });
@@ -74,6 +76,7 @@ const IRON = new THREE.MeshLambertMaterial({ color: 0x23252a });
 export class Ship {
   constructor(scene, o = {}) {
     this.scene = scene;
+    this.id = o.id || 'ship:?'; // stable network id, handed out by Ids (see ids.js)
     this.isPlayer = !!o.isPlayer;
     this.root = new THREE.Group(); this.root.rotation.order = 'YXZ'; scene.add(this.root);
     this.pos = new THREE.Vector3(o.x || 0, 0, o.z || 0);
@@ -191,7 +194,7 @@ export class Ship {
         // Ready light on the carriage: green = loaded, red = reloading
         lamp = new THREE.Mesh(LAMP_GEO, LAMP_READY); lamp.position.set(s * 1.95, 0.45, z + 0.45); this.root.add(lamp);
       }
-      this.cannons.push({ side: s, z, outer, elev, barrel, muzzle, breech, baseYaw: outer.rotation.y, lamp,
+      this.cannons.push({ id: `${this.id}/cannon:${this.cannons.length}`, side: s, z, outer, elev, barrel, muzzle, breech, baseYaw: outer.rotation.y, lamp,
         elevation: 0.06, yaw: 0, tElev: 0.06, tYaw: 0, reload: 0, fuse: -1, recoil: 0, inArc: false, sparkT: 0 });
     }
 
@@ -261,7 +264,17 @@ export class Ship {
     return out;
   }
 
+  // One frame for this ship. Split in three so multiplayer can share the work:
+  //   step()    game rules: speed, steering, position, reloads, sinking (the host runs this)
+  //   float()   bobbing on the waves, worked out from shared wave math (every headset runs this)
+  //   animate() sails, flag, wheel and cannon visuals (every headset runs this)
   update(dt, t) {
+    this.step(dt);
+    this.float(dt, t);
+    this.animate(dt, t);
+  }
+
+  step(dt) {
     if (this.alive) {
       this.speed = damp(this.speed, this.sail * this.maxSpeed, 0.35, dt);
       this.heading -= this.rudder * this.turnRate * (0.3 + 0.7 * (this.speed / this.maxSpeed)) * dt;
@@ -271,8 +284,13 @@ export class Ship {
     }
     this.vel.set(-Math.sin(this.heading) * this.speed, 0, -Math.cos(this.heading) * this.speed);
     this.pos.addScaledVector(this.vel, dt);
+    for (const c of this.cannons) {
+      c.reload = Math.max(0, c.reload - dt);
+      c.elevation = damp(c.elevation, c.tElev, 4, dt); c.yaw = damp(c.yaw, c.tYaw, 4, dt);
+    }
+  }
 
-    // Float on the waves
+  float(dt, t) {
     const p = { x: 0, z: 0 };
     const hb = (this.localToWorldXZ(0, -8, p), waveHeight(p.x, p.z, t));
     const hs = (this.localToWorldXZ(0, 7, p), waveHeight(p.x, p.z, t));
@@ -293,7 +311,9 @@ export class Ship {
     this.root.position.set(this.pos.x, this.bob + 1.3 - sink, this.pos.z);
     this.root.rotation.set(this.pitch, this.heading, this.roll);
     this.root.updateMatrixWorld(true);
+  }
 
+  animate(dt, t) {
     // Sails
     for (const s of this.sails) {
       const furl = 0.1 + 0.9 * this.sail;
@@ -322,9 +342,7 @@ export class Ship {
 
     // Cannons
     for (const c of this.cannons) {
-      c.reload = Math.max(0, c.reload - dt);
       if (c.lamp) c.lamp.material = c.fuse >= 0 ? LAMP_FUSE : c.reload > 0 ? LAMP_EMPTY : LAMP_READY;
-      c.elevation = damp(c.elevation, c.tElev, 4, dt); c.yaw = damp(c.yaw, c.tYaw, 4, dt);
       c.elev.rotation.x = c.elevation; c.outer.rotation.y = c.baseYaw + c.yaw;
       c.recoil = Math.max(0, c.recoil - dt * 1.6);
       c.barrel.position.z = Math.sin(Math.min(1, c.recoil) * Math.PI * 0.5) * 0.4;
@@ -354,6 +372,12 @@ export class Ship {
     c.tYaw = clamp(ang + (Math.random() - 0.5) * err * 2, -0.45, 0.45);
     c.tElev = clamp(th - c.side * this.roll + (Math.random() - 0.5) * err, -0.12, 0.42);
     return true;
+  }
+
+  // The helm: the wheel and sail lever positions set the rudder and how much sail is up.
+  applyHelm() {
+    this.rudder = clamp(-this.wheelAngle / WHEEL_MAX, -1, 1);
+    this.sail = (LEVER_MAX - this.leverAngle) / (2 * LEVER_MAX);
   }
 
   // Ready to fire and pointing roughly where it wants to

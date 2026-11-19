@@ -11,11 +11,11 @@ export class Crew {
       { look: { shirt: 0x7f8f5f, pants: 0x4a3b2b, hat: 0x2a1d14 }, role: 'gunner', side: 1, home: [1.15, -1.6] },
       { look: { shirt: 0x6a2f2a, pants: 0x2b2b2b, bandana: 0x2050a0, skin: 0x8d5a3b }, role: 'lookout', side: 0, home: [0.6, -7.8] },
     ];
-    this.members = defs.map((d) => {
+    this.members = defs.map((d, i) => {
       const p = makePerson({ ...d.look, cutlass: d.role === 'gunner' });
       p.g.position.set(d.home[0], 0, d.home[1]);
       G.ship.root.add(p.g);
-      return { p, role: d.role, side: d.side, home: new THREE.Vector3(d.home[0], 0, d.home[1]), atkCD: 0, victim: null, cannon: null, fireCD: 30 };
+      return { id: `crew:${i}`, p, role: d.role, side: d.side, home: new THREE.Vector3(d.home[0], 0, d.home[1]), atkCD: 0, victim: null, cannon: null, fireCD: 30 };
     });
   }
 
@@ -41,7 +41,7 @@ export class Crew {
         if (fd > 1.0) { const k = 1.8 * dt / fd; pos.x += (foe.p.g.position.x - pos.x) * k; pos.z += (foe.p.g.position.z - pos.z) * k; }
         if (m.atkCD <= 0 && p.attack < 0) { p.attack = 0; m.atkCD = 3.2; m.victim = foe; }
         if (p.attack > 0.62 && m.victim) {
-          if (Math.random() < 0.15) { _a.set(pos.x, 1.3, pos.z); S.root.localToWorld(_a); G.fx.hit(_a); G.audio.thud(_a); G.enemies.hitBoarder(m.victim, 1, m.victim.p.g.position.x - pos.x, m.victim.p.g.position.z - pos.z); }
+          if (Math.random() < 0.15) { _a.set(pos.x, 1.3, pos.z); S.root.localToWorld(_a); G.events.emit('bladeContact', { pos: _a }); G.events.emit('boarderStruck', { pos: _a }); G.enemies.hitBoarder(m.victim, 1, m.victim.p.g.position.x - pos.x, m.victim.p.g.position.z - pos.z); }
           m.victim = null;
         }
         animatePerson(p, dt, fd > 1.0, t);
@@ -61,7 +61,7 @@ export class Crew {
           target = _t.set(m.side * 1.25, 0, best.z + 0.35);
           if (pos.distanceTo(target) < 0.25) {
             facing = [m.side, 0];
-            if (S.lightCannon(best, 0.5)) { p.attack = 0.3; m.fireCD = 40; best.breech.getWorldPosition(_a); G.audio.fuse(_a); }
+            if (S.lightCannon(best, 0.5)) { p.attack = 0.3; m.fireCD = 40; G.events.emit('fuseLit', { ship: S, cannon: best, pos: best.breech.getWorldPosition(_a) }); }
           }
         }
       }

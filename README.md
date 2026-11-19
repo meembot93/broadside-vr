@@ -24,3 +24,13 @@ Your crew only fires a cannon now and then, so the fighting is up to you.
 - All sounds are synthesized with WebAudio and all models are built from basic shapes in code,
   so there are no asset files.
 - Needs an https address to run in VR.
+
+## Code layout (multiplayer-ready)
+
+- Player input never changes the game directly: it calls `G.act({ type, ... })` (`js/actions.js`).
+- Game rules emit events (`G.events`); `js/presentation.js` turns them into effects, sound,
+  haptics and messages.
+- Ships, cannons, items, boarders and cannonballs have stable ids; `G.snapshot()` returns the whole
+  game state as plain data.
+- See [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md) for the plan to add friends.
+
