@@ -537,7 +537,7 @@ export class Ship {
       for (const f of [-1, 1]) k.box(0.04, s * 1.25, 0.03, 0x6a4628, [x + f * e * sn, y0 + s / 2, z + f * e * c], [0, ry, Math.PI / 4]);
     };
     const coil = (x, z, r = 0.32) => { for (let i = 0; i < 3; i++) k.add(new THREE.TorusGeometry(r - i * 0.07, 0.04, 4, 12), 0xb89a66, [x, 0.04 + i * 0.06, z], [Math.PI / 2, 0, 0]); };
-    barrel(2.35, -5.7); barrel(2.1, -6.35, 0.27, 0.68); crate(-2.25, -5.6, 0.62, 0.3); crate(-2.3, -5.6, 0.42, 0.9, 0.62);
+    barrel(2.0, -5.45); barrel(1.85, -6.1, 0.27, 0.68); crate(-1.95, -5.4, 0.62, 0.3); crate(-1.98, -5.4, 0.42, 0.9, 0.62);
     coil(-1.1, -7.9); barrel(2.45, 2.55, 0.28, 0.7); coil(-2.3, 2.4);
     if (!this.gunZ.some((gz) => Math.abs(gz - 4.25) < 1)) crate(2.4, 4.25, 0.55, 0.15);
     if (kind !== 'sloop') { barrel(-2.45, -1.9, 0.27, 0.7); coil(2.4, -1.8, 0.28); }
