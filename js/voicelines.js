@@ -92,11 +92,19 @@ export function wireVoices(G) {
   on('gameStarted', () => { V.load(); V.say('welcome', { prio: 2, delay: 1.2 }); });
 
   // Lookout and battle
-  on('enemySpawned', ({ count }) => V.say(count > 1 ? 'sightedMore' : 'sighted', { prio: 2, delay: 0.8 }));
-  on('enemySunk', () => V.say('sunk', { prio: 2, delay: 0.9 }));
+  on('enemySpawned', ({ count, boss }) => !boss && V.say(count > 1 ? 'sightedMore' : 'sighted', { prio: 2, delay: 0.8 }));
+  on('enemySunk', ({ ship }) => { if (!ship.boss) V.say('sunk', { prio: 2, delay: 0.9 }); });
   on('shipHit', ({ ship }) => { if (ship === G.ship) V.say('takingHits', { chance: 0.4, cool: 18 }); });
-  on('enemyCrewKilled', ({ role, left }) => { if (role === 'helm' && left > 0) V.say('helmDown', { cool: 10 }); });
-  on('enemyAbandoned', () => V.say('abandoned', { prio: 2, delay: 0.5 }));
+  on('enemyCrewKilled', ({ role, left, boss }) => { if (role === 'helm' && left > 0 && !boss) V.say('helmDown', { cool: 10 }); });
+  on('enemyAbandoned', ({ ship }) => { if (!ship.boss) V.say('abandoned', { prio: 2, delay: 0.5 }); });
+
+  // Voyages and boss captains (voyages.js)
+  const bossOf = (e) => e && e.crew && e.crew.find((m) => m.boss && !m.p.dead)?.p;
+  on('bossArrived', () => V.say('bossArrived', { prio: 2, delay: 1.2 }));
+  on('bossWounded', ({ cause }) => { const e = G.voyages && G.voyages.bossShip, b = bossOf(e); if (b) V.say('bossTaunt', { prio: cause === 'sword' ? 1 : 0, chance: 0.5, cool: 8, at: b }); });
+  on('bossCaptainKilled', () => V.say('bossFalls', { prio: 2, delay: 1 }));
+  on('waveCleared', ({ next, nextIsBoss }) => { if (next) V.say(nextIsBoss ? 'bossNear' : 'waveCleared', { prio: 2, delay: 1.5 }); });
+  on('voyageWon', () => V.say('voyageWon', { prio: 2, delay: 1.5 }));
   on('musketHit', ({ kind }) => { if (kind === 'enemyCrew' || kind === 'boarder') V.say('niceShot', { prio: 0, chance: 0.3, cool: 15, delay: 0.5 }); });
 
   // Boarders
@@ -114,7 +122,7 @@ export function wireVoices(G) {
   on('enemyGrappled', ({ ship }) => { V.say('enemyGrapple', { prio: 0, chance: 0.6, at: enemyVoice(ship) }); V.say('theyGrapple', { prio: 2, delay: 0.2 }); });
   on('shipsLashed', ({ by }) => V.say(by === 'us' ? 'lashed' : 'theyLashed', { prio: 2 }));
   on('crewBoards', ({ name }) => V.say('crewBoards', { who: name, chance: 0.5, cool: 8 }));
-  on('playerCrossed', ({ player, ship, home }) => { if (isMe(player) && !home) V.say('enemyRepel', { chance: 0.8, cool: 10, at: enemyVoice(ship) }); });
+  on('playerCrossed', ({ player, ship, home }) => { if (isMe(player) && !home) { const b = bossOf(ship); if (b) V.say('bossTaunt', { at: b, cool: 8 }); else V.say('enemyRepel', { chance: 0.8, cool: 10, at: enemyVoice(ship) }); } });
   on('prizeTaken', () => V.say('prize', { prio: 2, delay: 0.6 }));
   on('kegLit', () => V.say('kegLit', { prio: 2, delay: 0.3 }));
   on('kegExploded', () => V.say('boom', { prio: 2, delay: 1.3 }));
