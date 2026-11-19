@@ -3,5 +3,5 @@
 //
 // EVERY change merged to main must bump VERSION by 1 and replace CHANGES with a few
 // words on what that change did (newest first, keep it to 2-4 short items).
-export const VERSION = 10;
-export const CHANGES = ['new pirates & weapons', 'ship details & ship types', 'always loads newest files', 'version label'];
+export const VERSION = 11;
+export const CHANGES = ['crew fight & board', 'powder kegs', 'grapple aims by hand', 'orders on wrist'];
