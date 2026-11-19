@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { halfWidth, RACK, WHEEL_MAX } from './ship.js';
+import { GRAPPLE_RANGE } from './grapple.js';
 import { clamp, angleWrap, canvasTex } from './util.js';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _q = new THREE.Quaternion();
@@ -195,6 +196,8 @@ export class Player {
     }
     ship.leverKnob.getWorldPosition(_c);
     consider('lever', _a.distanceTo(_c), 0.3, { point: _c.clone() });
+    const gh = this.G.grapples.handle.getWorldPosition(_c);
+    consider('grapple', _a.distanceTo(gh), 0.3, { point: _c.clone() });
     for (const c of ship.cannons) {
       _seg.start.set(0, 0.05, 0.7); _seg.end.set(0, 0.05, -0.3);
       c.elev.localToWorld(_seg.start); c.elev.localToWorld(_seg.end);
@@ -229,6 +232,11 @@ export class Player {
       }
       return;
     }
+    if (t.kind === 'grapple' && !this.toldGrapple) {
+      this.toldGrapple = true;
+      this.G.hud.msg('Point it at an enemy ship and pull TRIGGER', 4);
+      this.G.hud.msg(`The rope reaches about ${GRAPPLE_RANGE} m`, 3);
+    }
     if (t.kind === 'wheel') { _b.copy(this.handPos(h, _a)); this.G.ship.wheelBase.worldToLocal(_b); h.wheelPrev = Math.atan2(_b.y, _b.x); }
     h.held = t.kind; this.haptic(h, 0.3, 30);
   }
@@ -254,6 +262,7 @@ export class Player {
   triggerPress(h) {
     if (h.held && h.held.kind === 'musket') { this.fireMusket(h.held, h); return; }
     if (h.held === 'support' && h.supporting) { this.fireMusket(h.supporting, h.supporting.holder); return; }
+    if (h.held === 'grapple') { this.fireGrapple(h); return; }
     if (h.held) return;
     const t = this.findTarget(h);
     if (t && t.kind === 'cannon') this.useCannon(h, t.c);
@@ -270,6 +279,7 @@ export class Player {
       else if (t.kind === 'item') text = t.it.kind === 'musket' ? 'GRIP to take musket' : 'GRIP to take cutlass';
       else if (t.kind === 'wheel') text = 'GRIP to steer';
       else if (t.kind === 'lever') text = 'GRIP and push:\nmore sail';
+      else if (t.kind === 'grapple') text = this.G.grapples.anyLineOut() ? 'GRIP, TRIGGER:\ncut the lines' : 'GRIP to aim\nthe grapple';
       else if (t.kind === 'cannon') text = this.G.ship.cannonReady(t.c) ? 'TRIGGER to fire!' : `Reloading... ${Math.ceil(t.c.reload)}`;
     }
     const key = t ? t.kind + (t.it ? t.it.kind + this.items.indexOf(t.it) : '') + (t.c ? this.G.ship.cannons.indexOf(t.c) : '') : '';
@@ -307,6 +317,13 @@ export class Player {
     it.obj.quaternion.copy(_q2.invert()).multiply(_q);
   }
 
+  // Fire the grapple hook where the gun points (or cut the lines if they're out).
+  fireGrapple(h) {
+    const r = this.G.act({ type: 'fireGrapple', dir: this.G.grapples.gunDir(new THREE.Vector3()) });
+    if (h) this.haptic(h, r === 'fired' ? 0.9 : 0.3, r === 'fired' ? 90 : 30);
+    if (r === 'busy' && this.G.grapples.locks.length) this.G.hud.msg('Can’t cut the lines while you’re over there!', 2);
+  }
+
   updateWheel(h, dt) {
     const ship = this.G.ship;
     this.handPos(h, _b); ship.wheelBase.worldToLocal(_b);
@@ -325,7 +342,7 @@ export class Player {
 
   move(x, y, dt) {
     if (Math.abs(x) < 0.15 && Math.abs(y) < 0.15) return;
-    const ship = this.G.ship;
+    const ship = this.ship;
     this.G.camera.getWorldDirection(_a);
     ship.root.getWorldQuaternion(_q).invert(); _a.applyQuaternion(_q);
     this.dolly.updateMatrix();
@@ -337,17 +354,28 @@ export class Player {
   }
 
   snapTurn(a) {
-    const ship = this.G.ship;
+    const ship = this.ship;
     this.G.camera.getWorldPosition(_a); ship.root.worldToLocal(_a);
     this.dolly.position.sub(_a).applyAxisAngle(UP, a).add(_a);
     this.dolly.rotation.y += a;
   }
 
   // Keep the player's head over the deck (and out of the masts).
-  clampToDeck() {
-    const ship = this.G.ship;
+  clampToDeck(depth = 0) {
+    const ship = this.ship;
     this.dolly.updateMatrixWorld(true);
     this.G.camera.getWorldPosition(_a); ship.root.worldToLocal(_a);
+    // Lashed alongside another ship: you can climb over the rail onto her deck
+    const other = this.G.grapples?.linkedShip(ship);
+    if (other && Math.abs(_a.x) > halfWidth(clamp(_a.z, -8.6, 6.95)) - 0.45) {
+      this.G.camera.getWorldPosition(_b); other.root.worldToLocal(_b);
+      const hwO = halfWidth(clamp(_b.z, -8.6, 6.95));
+      if (_b.z > -8.6 && _b.z < 6.95 && Math.abs(_b.x) < hwO + 1.6) {
+        if (Math.abs(_b.x) < hwO - 0.5 && depth < 2) { this.transfer(other); this.clampToDeck(depth + 1); return; }
+        this.headLocal.copy(_a); // climbing across between the two rails
+        return;
+      }
+    }
     let x = _a.x, z = clamp(_a.z, -8.6, 6.95);
     const hw = Math.max(0.2, halfWidth(z) - 0.45); x = clamp(x, -hw, hw);
     for (const mz of [-1, -6.5]) {
@@ -380,6 +408,7 @@ export class Player {
       h.glove.scale.set(1, sq ? 0.7 : 1, sq ? 0.8 : 1);
       h.glove.userData.palm.material.color.setHex(trig ? 0xc87a3a : sq ? 0x7a5230 : 0x4a2e1a);
       if (h.held && h.held.kind === 'musket') this.aimTwoHanded(h);
+      if (h.held === 'grapple') { h.ctrl.getWorldQuaternion(_q); this.G.act({ type: 'aimGrapple', dir: _b.set(0, 0, -1).applyQuaternion(_q) }); }
       if (h.held === 'wheel') this.updateWheel(h, dt);
       else if (h.held === 'lever') this.updateLever(h);
       this.updateHover(h);
@@ -409,6 +438,7 @@ export class Player {
       if (e.code === 'Digit2') this.equip('sword');
       if (e.code === 'Digit3') this.equip(null);
       if (e.code === 'KeyT') this.G.act({ type: 'order' });
+      if (e.code === 'KeyG') { const d = this.G.camera.getWorldDirection(new THREE.Vector3()); this.G.act({ type: 'aimGrapple', dir: d }); this.fireGrapple(null); }
       if (e.code === 'Space') { e.preventDefault(); if (!this.G.act({ type: 'broadside' })) this.G.hud.msg('No target in the cannons’ arc', 1.5); }
     });
     document.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
@@ -483,7 +513,24 @@ export class Player {
   }
 
   // ---------- Shared ----------
+  // Step onto another ship's deck (keeps you exactly where you are in the world).
+  transfer(ship) {
+    if (ship === this.ship) return;
+    ship.root.attach(this.dolly);
+    this.dolly.rotation.x = 0; this.dolly.rotation.z = 0; this.dolly.position.y = 0;
+    this.ship = ship;
+    this.G.events.emit('playerCrossed', { player: this, ship, home: ship === this.G.ship });
+  }
+
+  // Back to our own deck in a hurry (the ship you were on is going down).
+  returnHome() {
+    if (this.ship === this.G.ship) return;
+    this.transfer(this.G.ship);
+    this.dolly.position.set(0, 0, 2); this.dolly.rotation.set(0, this.dolly.rotation.y, 0);
+  }
+
   respawn() {
+    if (this.ship !== this.G.ship) { this.G.ship.root.add(this.dolly); this.ship = this.G.ship; }
     for (const h of this.hands) { this.release(h); h.evTrig = h.evSq = false; }
     this.dolly.position.set(0, 0, 6.5); this.dolly.rotation.set(0, 0, 0);
     this.yaw = 0; this.pitch = 0;
@@ -501,7 +548,7 @@ export class Player {
   // the rack, musket ready gems. A VR sword is also checked against boarders here, since how
   // fast you swing it is input.
   updateView(dt) {
-    const G = this.G, ship = G.ship;
+    const G = this.G, ship = this.ship;
     this.hurtFlash = Math.max(0, this.hurtFlash - dt * 2.5);
     const op = this.dead ? 0.85 : this.hurtFlash * 0.45 + Math.max(0, 0.5 - this.health / 100) * 0.4;
     this.vignette.material.opacity = op; this.vignette.visible = op > 0.01;

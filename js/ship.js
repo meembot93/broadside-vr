@@ -329,7 +329,8 @@ export class Ship {
       this.speed = damp(this.speed, 0, 0.6, dt);
     }
     this.vel.set(-Math.sin(this.heading) * this.speed, 0, -Math.cos(this.heading) * this.speed);
-    this.pos.addScaledVector(this.vel, dt);
+    // A ship lashed to ours by grapple lines is moved by grapple.js instead
+    if (!this.pinned) this.pos.addScaledVector(this.vel, dt);
     for (const c of this.cannons) {
       c.reload = Math.max(0, c.reload - dt);
       c.elevation = damp(c.elevation, c.tElev, 4, dt); c.yaw = damp(c.yaw, c.tYaw, 4, dt);
@@ -432,6 +433,12 @@ export class Ship {
   // Ready to fire and pointing roughly where it wants to
   cannonReady(c) { return c.reload <= 0 && c.fuse < 0 && this.alive; }
   lightCannon(c, delay = 0.4) { if (!this.cannonReady(c)) return false; c.fuse = delay; return true; }
+
+  // A taken prize: haul down her colours and run up ours.
+  strikeColors() { this.flag.material.map = flagTex('jolly'); this.flag.material.needsUpdate = true; }
+
+  // Send her to the bottom without it counting as a kill (a prize we are done with).
+  scuttle() { if (this.alive) { this.alive = false; this.health = 0; this.sail = 0; } }
 
   damage(n) {
     if (!this.alive) return;
