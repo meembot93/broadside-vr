@@ -8,6 +8,8 @@ https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0
 Usage: python3 tools/voices/make_voices.py <folder with the model files>
 """
 import json, os, re, subprocess, sys, tempfile
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from voicelib import write_list, load, RECORDED
 import soundfile as sf
 from kokoro_onnx import Kokoro
 
@@ -16,8 +18,9 @@ models = sys.argv[1] if len(sys.argv) > 1 else '.'
 k = Kokoro(os.path.join(models, 'kokoro-v1.0.onnx'), os.path.join(models, 'voices-v1.0.bin'))
 data = json.load(open(os.path.join(ROOT, 'tools/voices/lines.json')))
 out_dir = os.path.join(ROOT, 'sounds/voice'); os.makedirs(out_dir, exist_ok=True)
-for f in os.listdir(out_dir):
-    if f.endswith('.ogg'): os.remove(os.path.join(out_dir, f))
+recorded = load(RECORDED, {})
+for f in os.listdir(out_dir):  # keep real recordings
+    if f.endswith('.ogg') and f[:-4] not in recorded: os.remove(os.path.join(out_dir, f))
 
 ARR = 'ˈɑːɹ'  # a growled, rolled pirate "Arr"
 
@@ -49,18 +52,9 @@ def make(text, sp, path):
                         '-c:a', 'libopus', '-b:a', '32k', '-application', 'voip', path], check=True)
 
 speakers = data['speakers']
-listing = {}
 for key, grp in data['groups'].items():
-    clips = []
     for i, text in enumerate(grp['lines']):
         who = grp['by'][i % len(grp['by'])]
-        cid = f'{key}{i + 1}'
-        make(text, speakers[who], os.path.join(out_dir, cid + '.ogg'))
-        clips.append({'id': cid, 'who': who, 'text': text})
-        print(cid, who, text)
-    listing[key] = clips
-
-with open(os.path.join(ROOT, 'js/voicelist.js'), 'w') as f:
-    f.write('// MADE BY tools/voices/make_voices.py from tools/voices/lines.json. Edit those, not this.\n')
-    f.write('// Each clip is sounds/voice/<id>.ogg; "who" is the pirate whose voice it is.\n')
-    f.write('export const VOICE_LINES = ' + json.dumps(listing, indent=1, ensure_ascii=False) + ';\n')
+        make(text, speakers[who], os.path.join(out_dir, f'{key}{i + 1}.ogg'))
+        print(f'{key}{i + 1}', who, text)
+write_list()

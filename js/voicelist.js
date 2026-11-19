@@ -1,5 +1,6 @@
-// MADE BY tools/voices/make_voices.py from tools/voices/lines.json. Edit those, not this.
-// Each clip is sounds/voice/<id>.ogg; "who" is the pirate whose voice it is.
+// MADE BY tools/voices/*.py from tools/voices/lines.json and recorded.json. Edit those, not this.
+// Each clip is sounds/voice/<id>.ogg; "who" is the pirate whose voice it is;
+// "recorded" clips are real voice recordings and replace the generated ones in their group.
 export const VOICE_LINES = {
  "sighted": [
   {
