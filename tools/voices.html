@@ -1,0 +1,18 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pirate voices</title>
+<style>body{font:16px system-ui;background:#1b1712;color:#f1e6d0;margin:0;padding:16px}h2{font-size:15px;color:#d9b36b;margin:18px 0 6px}
+button{display:block;width:100%;text-align:left;margin:4px 0;padding:10px;border:0;border-radius:8px;background:#2e271e;color:inherit;font:inherit;cursor:pointer}
+button:hover{background:#3d3427}small{color:#a99877;margin-left:6px}</style></head>
+<body><h1>Pirate voice lines</h1><p>Tap a line to hear it. These play in the game when the matching thing happens.</p><div id="list"></div>
+<script type="module">
+import { VOICE_LINES } from '../js/voicelist.js';
+const list = document.getElementById('list');
+for (const [group, clips] of Object.entries(VOICE_LINES)) {
+  const h = document.createElement('h2'); h.textContent = group; list.append(h);
+  for (const c of clips) {
+    const b = document.createElement('button'); b.innerHTML = `${c.text}<small>${c.who}</small>`;
+    b.onclick = () => new Audio(`../sounds/voice/${c.id}.ogg`).play(); list.append(b);
+  }
+}
+</script></body></html>

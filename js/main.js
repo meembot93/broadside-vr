@@ -15,6 +15,7 @@ import { Events } from './events.js';
 import { Ids } from './ids.js';
 import { applyAction, stepPlayers, hurtPlayer } from './actions.js';
 import { wirePresentation } from './presentation.js';
+import { wireVoices } from './voicelines.js';
 import { snapshot } from './state.js';
 
 const params = new URLSearchParams(location.search);
@@ -75,6 +76,7 @@ G.snapshot = () => snapshot(G);
 // ---------- Game events ----------
 // Effects, sounds and messages for every event are in presentation.js.
 wirePresentation(G);
+wireVoices(G);
 // Rules that react to events:
 G.events.on('playerDied', () => { G.state = 'dead'; G.stateT = 3; });
 
@@ -109,6 +111,7 @@ function begin(vr) {
   overlay.style.display = 'none';
   if (G.started) return;
   G.started = true;
+  G.events.emit('gameStarted');
   if (vr) {
     G.hud.msg('Welcome aboard, Captain!', 3);
     G.hud.msg('Squeeze GRIP (the side button) to grab', 4.5);
