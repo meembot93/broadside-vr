@@ -1,10 +1,25 @@
 import * as THREE from 'three';
 import { waveHeight } from './waves.js';
-import { BALL_SPEED } from './ship.js';
+import { BALL_SPEED, HELM_COVER } from './ship.js';
 import { segSegDist, rand } from './util.js';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
-const _e = new THREE.Vector3(), _f = new THREE.Vector3();
+const _e = new THREE.Vector3(), _f = new THREE.Vector3(), _o = new THREE.Vector3(), _r = new THREE.Vector3(), _qi = new THREE.Quaternion();
+
+// Distance along a ray (origin o, direction r, both ship-local) to a box, or Infinity.
+function rayBox(o, r, min, max) {
+  let t0 = 0, t1 = Infinity;
+  for (const k of ['x', 'y', 'z']) {
+    if (Math.abs(r[k]) < 1e-9) { if (o[k] < min[k] || o[k] > max[k]) return Infinity; continue; }
+    let a = (min[k] - o[k]) / r[k], b = (max[k] - o[k]) / r[k];
+    if (a > b) [a, b] = [b, a];
+    t0 = Math.max(t0, a); t1 = Math.min(t1, b);
+    if (t0 > t1) return Infinity;
+  }
+  return t0;
+}
+// Is this deck spot inside an enemy helm shelter?
+const inShelter = (pos) => Math.abs(pos.x) < HELM_COVER.x && pos.z > HELM_COVER.z0 && pos.z < HELM_COVER.z1;
 const BALL_GEO = new THREE.SphereGeometry(0.15, 10, 8);
 const BALL_MAT = new THREE.MeshLambertMaterial({ color: 0x1b1b1e });
 
@@ -53,7 +68,7 @@ export class Combat {
     const G = this.G;
     G.score++;
     G.events.emit('enemySunk', { ship: s, score: G.score });
-    for (const m of s.crew) if (!m.p.dead && Math.random() < 0.5) m.p.dead = true;
+    for (const m of s.crew) if (!m.p.dead && Math.random() < 0.5) { m.p.dead = true; m.p.pose = null; }
   }
 
   update(dt, t) {
@@ -77,6 +92,14 @@ export class Combat {
         if (s.containsWorld(p)) {
           const dmg = b.owner.isPlayer ? 14 : 5;
           s.damage(dmg);
+          // Splinters: sailors close to where it hit may go down (not behind the helm shelter)
+          if (s !== G.ship) {
+            _a.copy(p); s.root.worldToLocal(_a);
+            for (const m of s.crew) {
+              const mp = m.p.g.position;
+              if (!m.p.dead && !inShelter(mp) && Math.hypot(mp.x - _a.x, mp.z - _a.z) < 2.4 && Math.random() < 0.6) G.enemies.killCrew(s, m, 'cannon');
+            }
+          }
           G.events.emit('shipHit', { ship: s, pos: p, by: b.owner });
           if (s !== G.ship && !s.alive) this.enemySunk(s);
           done = true; break;
@@ -96,14 +119,23 @@ export class Combat {
     const G = this.G, MAX = 160;
     _e.copy(origin).addScaledVector(dir, MAX);
     let bestT = MAX, hit = null;
-    const testPerson = (p, root, h) => {
+    // tight: someone behind cover only shows their head, so no extra forgiveness for them
+    const testPerson = (p, root, h, tight) => {
       _c.copy(p.g.position).setY(p.g.position.y + 0.2); root.localToWorld(_c);
       _d.copy(p.g.position).setY(p.g.position.y + 1.75); root.localToWorld(_d);
       const r = segSegDist(origin, _e, _c, _d);
-      if (r.d < 0.3 + r.s * MAX * 0.012 && r.s * MAX < bestT) { bestT = r.s * MAX; hit = h; } // forgiving: wider the further away
+      const reach = tight ? 0.2 : 0.3 + r.s * MAX * 0.012; // forgiving: wider the further away
+      if (r.d < reach && r.s * MAX < bestT) { bestT = r.s * MAX; hit = h; }
     };
     for (const b of G.enemies.boarders) if (b.state !== 'dead') testPerson(b.p, G.ship.root, { kind: 'boarder', b });
-    for (const s of G.enemies.ships) for (const m of s.crew) if (!m.p.dead) testPerson(m.p, s.root, { kind: 'enemyCrew', m });
+    for (const s of G.enemies.ships) for (const m of s.crew) if (!m.p.dead) testPerson(m.p, s.root, { kind: 'enemyCrew', m, s }, inShelter(m.p.g.position));
+    // Cover on deck (helm shelter, stern cabin) stops the ball
+    for (const s of G.enemies.ships) {
+      if (!s.alive || s.pos.distanceTo(origin) > MAX + 20) continue;
+      _o.copy(origin); s.root.worldToLocal(_o);
+      s.root.getWorldQuaternion(_qi).invert(); _r.copy(dir).applyQuaternion(_qi);
+      for (const c of s.covers) { const t = rayBox(_o, _r, c.min, c.max); if (t < bestT) { bestT = t; hit = { kind: 'hull', s, cover: true }; } }
+    }
     // Hulls: march along the ray
     for (const s of G.enemies.ships) {
       if (!s.alive || s.pos.distanceTo(origin) > MAX + 20) continue;
@@ -117,8 +149,8 @@ export class Combat {
     _f.copy(origin).addScaledVector(dir, bestT);
     if (hit) {
       if (hit.kind === 'boarder') G.enemies.killBoarder(hit.b);
-      else if (hit.kind === 'enemyCrew') hit.m.p.dead = true;
-      else if (hit.kind === 'hull') hit.s.damage(3);
+      else if (hit.kind === 'enemyCrew') G.enemies.killCrew(hit.s, hit.m, 'musket');
+      else if (hit.kind === 'hull' && !hit.cover) hit.s.damage(3);
       G.events.emit('musketHit', { kind: hit.kind, pos: _f });
       if (hit.kind === 'hull' && !hit.s.alive) this.enemySunk(hit.s);
     }

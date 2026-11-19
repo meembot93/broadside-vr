@@ -22,6 +22,10 @@ const LAMP_FUSE = new THREE.MeshBasicMaterial({ color: 0xffc020 });
 // Weapon rack spot (ship-local). Items hang just inboard of this, facing starboard.
 export const RACK = { x: -2.2, z: 5.6 };
 const G_ACC = 9.81;
+// Where an enemy's helmsman shelters (ship-local): front wall at z0, side walls to z1, top height.
+export const HELM_COVER = { x: 1.0, z0: 4.95, z1: 6.9, top: 1.58 };
+// Where whoever steers stands, just behind the wheel.
+export const HELM_SPOT = { x: 0, z: 6.3 };
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
 const _s = new THREE.Vector3(), _m = new THREE.Matrix4();
@@ -89,6 +93,8 @@ export class Ship {
     this.comfort = o.comfort ?? 1;
     this.reloadTime = o.reloadTime || 7;
     this.cannons = []; this.sails = []; this.crew = [];
+    // Solid things on deck that stop musket balls (boxes in ship-local space)
+    this.covers = [];
     this.geos = [];
     this.build(o);
   }
@@ -159,6 +165,21 @@ export class Ship {
     add(new THREE.BoxGeometry(0.9, 1.9, 0.06), dark, 0, 0.95, 7.29);
     for (const x of [-1.7, 1.7]) add(new THREE.BoxGeometry(0.6, 0.55, 0.05), glow, x, 1.55, 7.29);
     for (const x of [-cw / 2 + 0.1, cw / 2 - 0.1]) add(new THREE.BoxGeometry(0.18, 0.28, 0.18), glow, x, 2.75, 7.4);
+    this.covers.push({ min: new THREE.Vector3(-cw / 2, 0, 7.3), max: new THREE.Vector3(cw / 2, 2.5, 8.0) });
+
+    if (enemy) {
+      // Helm shelter: thick planking around the wheel so the helmsman can't simply be picked
+      // off. Only his head shows over the top.
+      const HT = HELM_COVER.top, z0 = HELM_COVER.z0, z1 = HELM_COVER.z1, xw = HELM_COVER.x;
+      add(new THREE.BoxGeometry(xw * 2 + 0.12, HT, 0.12), wallMat, 0, HT / 2, z0);
+      add(new THREE.BoxGeometry(xw * 2 + 0.24, 0.1, 0.22), dark, 0, HT + 0.03, z0);
+      for (const sx of [-1, 1]) {
+        add(new THREE.BoxGeometry(0.12, HT, z1 - z0), wallMat, sx * xw, HT / 2, (z0 + z1) / 2);
+        add(new THREE.BoxGeometry(0.22, 0.1, z1 - z0 + 0.1), dark, sx * xw, HT + 0.03, (z0 + z1) / 2);
+      }
+      this.covers.push({ min: new THREE.Vector3(-xw - 0.08, 0, z0 - 0.08), max: new THREE.Vector3(xw + 0.08, HT, z0 + 0.08) });
+      for (const sx of [-1, 1]) this.covers.push({ min: new THREE.Vector3(sx * xw - 0.08, 0, z0), max: new THREE.Vector3(sx * xw + 0.08, HT, z1) });
+    }
 
     // Masts, yards, furled canvas, crow's nest, bowsprit
     const masts = [{ z: -1, h: 15, r: 0.24, sails: [{ y: 13.4, w: 6, h: 4.4 }, { y: 8.6, w: 7.6, h: 5.7 }] },
@@ -379,6 +400,9 @@ export class Ship {
     this.rudder = clamp(-this.wheelAngle / WHEEL_MAX, -1, 1);
     this.sail = (LEVER_MAX - this.leverAngle) / (2 * LEVER_MAX);
   }
+
+  // Still worth fighting: afloat, still crewed, and not yet taken as a prize.
+  get hostile() { return this.alive && !this.captured && !this.abandoned; }
 
   // Ready to fire and pointing roughly where it wants to
   cannonReady(c) { return c.reload <= 0 && c.fuse < 0 && this.alive; }
