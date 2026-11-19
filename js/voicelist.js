@@ -1,21 +1,13 @@
-// MADE BY tools/voices/make_voices.py from tools/voices/lines.json. Edit those, not this.
-// Each clip is sounds/voice/<id>.ogg; "who" is the pirate whose voice it is.
+// MADE BY tools/voices/*.py from tools/voices/lines.json and recorded.json. Edit those, not this.
+// Each clip is sounds/voice/<id>.ogg; "who" is the pirate whose voice it is;
+// "recorded" clips are real voice recordings and replace the generated ones in their group.
 export const VOICE_LINES = {
  "sighted": [
   {
-   "id": "sighted1",
+   "id": "sighted_rec1",
    "who": "Finn",
-   "text": "Arr, there she be, matey! Sail off the bow!"
-  },
-  {
-   "id": "sighted2",
-   "who": "Finn",
-   "text": "Sail ho! Enemy ship, Captain!"
-  },
-  {
-   "id": "sighted3",
-   "who": "Finn",
-   "text": "Ship on the horizon! She's flyin' the black!"
+   "text": "Arr, there she be, matey! Sail off the bow!",
+   "recorded": true
   }
  ],
  "sightedMore": [
@@ -32,19 +24,10 @@ export const VOICE_LINES = {
  ],
  "sunk": [
   {
-   "id": "sunk1",
+   "id": "sunk_rec1",
    "who": "Bones",
-   "text": "Huzzah! Send her to Davy Jones!"
-  },
-  {
-   "id": "sunk2",
-   "who": "Patch",
-   "text": "She's goin' down, lads! Yo ho!"
-  },
-  {
-   "id": "sunk3",
-   "who": "Mags",
-   "text": "Har har! That'll learn 'em!"
+   "text": "Huzzah! Send her to Davy Jones!",
+   "recorded": true
   }
  ],
  "takingHits": [
@@ -66,14 +49,10 @@ export const VOICE_LINES = {
  ],
  "boarders": [
   {
-   "id": "boarders1",
+   "id": "boarders_rec1",
    "who": "Mags",
-   "text": "Boarders! Draw yer steel, lads!"
-  },
-  {
-   "id": "boarders2",
-   "who": "Mags",
-   "text": "Repel boarders, ye dogs!"
+   "text": "Boarders! Draw yer steel, lads!",
+   "recorded": true
   }
  ],
  "theyGrapple": [
@@ -90,19 +69,10 @@ export const VOICE_LINES = {
  ],
  "hooked": [
   {
-   "id": "hooked1",
+   "id": "hooked_rec1",
    "who": "Finn",
-   "text": "Arr, we hooked her, matey!"
-  },
-  {
-   "id": "hooked2",
-   "who": "Finn",
-   "text": "Got her! Haulin' her alongside!"
-  },
-  {
-   "id": "hooked3",
-   "who": "Finn",
-   "text": "She's hooked! Haul away, lads!"
+   "text": "Arr, we hooked her, matey! Haulin' her alongside!",
+   "recorded": true
   }
  ],
  "missed": [
@@ -126,14 +96,10 @@ export const VOICE_LINES = {
  ],
  "lashed": [
   {
-   "id": "lashed1",
+   "id": "lashed_rec1",
    "who": "Mags",
-   "text": "She's lashed alongside! Over the rail, me hearties!"
-  },
-  {
-   "id": "lashed2",
-   "who": "Mags",
-   "text": "Board her, lads! For plunder!"
+   "text": "She's lashed alongside! Over the rail, me hearties!",
+   "recorded": true
   }
  ],
  "theyLashed": [
@@ -293,26 +259,18 @@ export const VOICE_LINES = {
  ],
  "order_chase": [
   {
-   "id": "order_chase1",
+   "id": "order_chase_rec1",
    "who": "Hawkins",
-   "text": "Aye aye, Captain! After 'em!"
-  },
-  {
-   "id": "order_chase2",
-   "who": "Hawkins",
-   "text": "Arr, we'll run 'em down!"
+   "text": "Aye aye, Captain! After 'em!",
+   "recorded": true
   }
  ],
  "order_alongside": [
   {
-   "id": "order_alongside1",
+   "id": "order_alongside_rec1",
    "who": "Hawkins",
-   "text": "Aye, bringin' us alongside."
-  },
-  {
-   "id": "order_alongside2",
-   "who": "Hawkins",
-   "text": "Aye aye! Close on her, lads!"
+   "text": "Aye, bringin' us alongside, matey.",
+   "recorded": true
   }
  ],
  "order_heave": [
@@ -336,24 +294,10 @@ export const VOICE_LINES = {
  ],
  "enemyBoard": [
   {
-   "id": "enemyBoard1",
-   "who": "enemyA",
-   "text": "Arr! Take the ship!"
-  },
-  {
-   "id": "enemyBoard2",
+   "id": "enemyBoard_rec1",
    "who": "enemyB",
-   "text": "No quarter!"
-  },
-  {
-   "id": "enemyBoard3",
-   "who": "enemyC",
-   "text": "Yer gold or yer life!"
-  },
-  {
-   "id": "enemyBoard4",
-   "who": "enemyA",
-   "text": "Cut 'em down, lads!"
+   "text": "No quarter! Take the ship! Make 'em walk the plank!",
+   "recorded": true
   }
  ],
  "enemyTaunt": [
@@ -404,14 +348,10 @@ export const VOICE_LINES = {
  ],
  "bossArrived": [
   {
-   "id": "bossArrived1",
-   "who": "Finn",
-   "text": "Big galleon off the bow! It's their captain, comin' for us!"
-  },
-  {
-   "id": "bossArrived2",
+   "id": "bossArrived_rec1",
    "who": "Hawkins",
-   "text": "That be the captain's own ship. Steady, lads. Steady."
+   "text": "That be the captain's own galleon. Steady, lads. There's money in a pack.",
+   "recorded": true
   }
  ],
  "bossTaunt": [
@@ -464,19 +404,10 @@ export const VOICE_LINES = {
  ],
  "voyageWon": [
   {
-   "id": "voyageWon1",
+   "id": "voyageWon_rec1",
    "who": "Bones",
-   "text": "Huzzah! The voyage be won!"
-  },
-  {
-   "id": "voyageWon2",
-   "who": "Mags",
-   "text": "Yo ho ho! Drinks are on the Captain!"
-  },
-  {
-   "id": "voyageWon3",
-   "who": "Patch",
-   "text": "Har har! Rich as kings, we are!"
+   "text": "Yo ho ho! The voyage be won, me hearties!",
+   "recorded": true
   }
  ]
 };

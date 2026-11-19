@@ -59,7 +59,8 @@
         "Arr, there she be, matey! Sail off the bow!",
         "Sail ho! Enemy ship, Captain!",
         "Ship on the horizon! She's flyin' the black!"
-      ]
+      ],
+      "how": "calling down from the bow, excited"
     },
     "sightedMore": {
       "by": [
@@ -68,7 +69,8 @@
       "lines": [
         "Another sail, Captain! They're comin' for us!",
         "Sail ho! Another one, Cap'n!"
-      ]
+      ],
+      "how": "calling out, a bit worried"
     },
     "sunk": {
       "by": [
@@ -80,7 +82,8 @@
         "Huzzah! Send her to Davy Jones!",
         "She's goin' down, lads! Yo ho!",
         "Har har! That'll learn 'em!"
-      ]
+      ],
+      "how": "cheering, victorious"
     },
     "takingHits": {
       "by": [
@@ -91,7 +94,8 @@
         "We're takin' hits!",
         "Blast 'em! They've holed us!",
         "Arr, she's hurtin', Captain!"
-      ]
+      ],
+      "how": "alarmed, over cannon fire"
     },
     "boarders": {
       "by": [
@@ -100,7 +104,8 @@
       "lines": [
         "Boarders! Draw yer steel, lads!",
         "Repel boarders, ye dogs!"
-      ]
+      ],
+      "how": "shouting orders to the crew"
     },
     "theyGrapple": {
       "by": [
@@ -109,7 +114,8 @@
       "lines": [
         "They've thrown grapples! Stand by to repel boarders!",
         "Grapples on the rail! Here they come!"
-      ]
+      ],
+      "how": "alarmed shout"
     },
     "hooked": {
       "by": [
@@ -119,7 +125,8 @@
         "Arr, we hooked her, matey!",
         "Got her! Haulin' her alongside!",
         "She's hooked! Haul away, lads!"
-      ]
+      ],
+      "how": "triumphant shout"
     },
     "missed": {
       "by": [
@@ -128,7 +135,8 @@
       "lines": [
         "Missed her! Reloadin' the hook.",
         "Blast! Missed, Captain."
-      ]
+      ],
+      "how": "annoyed"
     },
     "tooFar": {
       "by": [
@@ -136,7 +144,8 @@
       ],
       "lines": [
         "She's too far, Captain! Bring us closer."
-      ]
+      ],
+      "how": "calling back to the captain"
     },
     "lashed": {
       "by": [
@@ -145,7 +154,8 @@
       "lines": [
         "She's lashed alongside! Over the rail, me hearties!",
         "Board her, lads! For plunder!"
-      ]
+      ],
+      "how": "rallying cry"
     },
     "theyLashed": {
       "by": [
@@ -153,7 +163,8 @@
       ],
       "lines": [
         "They're alongside! Give 'em steel!"
-      ]
+      ],
+      "how": "fierce shout"
     },
     "prize": {
       "by": [
@@ -163,7 +174,8 @@
       "lines": [
         "She's ours! The prize be ours, Captain!",
         "Strike her colours! She's ours!"
-      ]
+      ],
+      "how": "proud, celebrating"
     },
     "kegLit": {
       "by": [
@@ -172,7 +184,8 @@
       "lines": [
         "Fuse is lit! Run for it!",
         "Get back aboard, Captain! She's gonna blow!"
-      ]
+      ],
+      "how": "urgent, panicky"
     },
     "boom": {
       "by": [
@@ -182,7 +195,8 @@
       "lines": [
         "Har har! Blew her to splinters!",
         "Arr, what a bang! Yo ho ho!"
-      ]
+      ],
+      "how": "laughing, delighted"
     },
     "abandoned": {
       "by": [
@@ -190,7 +204,8 @@
       ],
       "lines": [
         "Their crew's all dead! She's driftin'!"
-      ]
+      ],
+      "how": "surprised, pleased"
     },
     "helmDown": {
       "by": [
@@ -199,7 +214,8 @@
       ],
       "lines": [
         "Their helmsman's down! She's steerin' wild!"
-      ]
+      ],
+      "how": "excited shout"
     },
     "niceShot": {
       "by": [
@@ -211,7 +227,8 @@
         "Fine shot, Captain!",
         "Arr, right between the eyes!",
         "Ha! Dropped him like a sack of spuds!"
-      ]
+      ],
+      "how": "impressed, cheerful"
     },
     "deckClear": {
       "by": [
@@ -220,7 +237,8 @@
       "lines": [
         "Deck's clear, Captain!",
         "That's the last of 'em!"
-      ]
+      ],
+      "how": "relieved, calm"
     },
     "crewBoards": {
       "by": [
@@ -234,7 +252,8 @@
         "Yo ho! For plunder!",
         "I'm with ye, Captain!",
         "Make way! I'm comin' over!"
-      ]
+      ],
+      "how": "eager, charging in"
     },
     "capDown": {
       "by": [
@@ -242,7 +261,8 @@
       ],
       "lines": [
         "The Captain's down!"
-      ]
+      ],
+      "how": "scared shout"
     },
     "capUp": {
       "by": [
@@ -250,7 +270,8 @@
       ],
       "lines": [
         "Up ye get, Captain. Back to the wheel."
-      ]
+      ],
+      "how": "gruff but kind"
     },
     "sinking": {
       "by": [
@@ -258,7 +279,8 @@
       ],
       "lines": [
         "We're goin' down! Abandon ship!"
-      ]
+      ],
+      "how": "panicked shout"
     },
     "aground": {
       "by": [
@@ -266,7 +288,8 @@
       ],
       "lines": [
         "We've run aground! Steer for open water!"
-      ]
+      ],
+      "how": "alarmed"
     },
     "welcome": {
       "by": [
@@ -274,7 +297,8 @@
       ],
       "lines": [
         "Welcome aboard, Captain. Ready to make sail."
-      ]
+      ],
+      "how": "warm, gravelly old sailor"
     },
     "order_hold": {
       "by": [
@@ -283,7 +307,8 @@
       "lines": [
         "Aye, holdin' her steady.",
         "Aye aye. Steady as she goes."
-      ]
+      ],
+      "how": "calm, steady"
     },
     "order_chase": {
       "by": [
@@ -292,7 +317,8 @@
       "lines": [
         "Aye aye, Captain! After 'em!",
         "Arr, we'll run 'em down!"
-      ]
+      ],
+      "how": "fierce, eager"
     },
     "order_alongside": {
       "by": [
@@ -301,7 +327,8 @@
       "lines": [
         "Aye, bringin' us alongside.",
         "Aye aye! Close on her, lads!"
-      ]
+      ],
+      "how": "steady, determined"
     },
     "order_heave": {
       "by": [
@@ -309,7 +336,8 @@
       ],
       "lines": [
         "Aye, heavin' to. Furl the sails!"
-      ]
+      ],
+      "how": "calm"
     },
     "helmBack": {
       "by": [
@@ -318,7 +346,8 @@
       "lines": [
         "She's all yours, Captain.",
         "Aye, the wheel's yours."
-      ]
+      ],
+      "how": "friendly"
     },
     "enemyBoard": {
       "by": [
@@ -331,7 +360,8 @@
         "No quarter!",
         "Yer gold or yer life!",
         "Cut 'em down, lads!"
-      ]
+      ],
+      "how": "battle cry, leaping aboard"
     },
     "enemyTaunt": {
       "by": [
@@ -344,7 +374,8 @@
         "Die, ye bilge rat!",
         "Arr! Taste me steel!",
         "I'll feed ye to the fishes!"
-      ]
+      ],
+      "how": "nasty sneer, mid sword fight"
     },
     "enemyRepel": {
       "by": [
@@ -356,7 +387,8 @@
         "Get off me ship, ye scurvy dog!",
         "Repel boarders!",
         "They're aboard! Cut 'em down!"
-      ]
+      ],
+      "how": "angry, defending their deck"
     },
     "enemyGrapple": {
       "by": [
@@ -365,7 +397,8 @@
       ],
       "lines": [
         "Grapples away! Haul her in!"
-      ]
+      ],
+      "how": "shouting to their own crew"
     },
     "bossArrived": {
       "by": [
@@ -375,7 +408,8 @@
       "lines": [
         "Big galleon off the bow! It's their captain, comin' for us!",
         "That be the captain's own ship. Steady, lads. Steady."
-      ]
+      ],
+      "how": "awed, a bit nervous"
     },
     "bossTaunt": {
       "by": [
@@ -387,7 +421,8 @@
         "Ye'll never take me ship alive!",
         "Come and face me, ye coward!",
         "Har! Is that all ye've got?"
-      ]
+      ],
+      "how": "big villain voice, booming"
     },
     "bossFalls": {
       "by": [
@@ -397,7 +432,8 @@
       "lines": [
         "Their captain's dead! The day is ours!",
         "Arr, the old devil's finished!"
-      ]
+      ],
+      "how": "triumphant cheer"
     },
     "waveCleared": {
       "by": [
@@ -406,7 +442,8 @@
       "lines": [
         "The sea's ours, for now. Keep a weather eye open.",
         "That's the lot of 'em. More sails'll be comin'."
-      ]
+      ],
+      "how": "calm, watchful"
     },
     "bossNear": {
       "by": [
@@ -414,7 +451,8 @@
       ],
       "lines": [
         "Make ready, lads. Their captain's close."
-      ]
+      ],
+      "how": "low, serious"
     },
     "voyageWon": {
       "by": [
@@ -426,7 +464,19 @@
         "Huzzah! The voyage be won!",
         "Yo ho ho! Drinks are on the Captain!",
         "Har har! Rich as kings, we are!"
-      ]
+      ],
+      "how": "big cheer, celebrating"
     }
-  }
+  },
+  "recordPitch": {
+    "Hawkins": -2,
+    "Finn": 0,
+    "Mags": 1,
+    "Bones": -3,
+    "Patch": -1,
+    "enemyA": -2,
+    "enemyB": -4,
+    "enemyC": -3
+  },
+  "_recordPitch": "Semitones to shift Meem's own recordings per character so one person can voice the whole crew (negative = deeper)."
 }

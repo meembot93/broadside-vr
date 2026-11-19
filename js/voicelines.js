@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { VOICE_LINES } from './voicelist.js';
 
 const VOL = 1.25;          // voice loudness next to the other sounds
-const WAIT = 3.5;          // how long an important line may wait for its turn (s)
+const WAIT = 5;            // how long an important line may wait for its turn (s)
 const GAP = 0.35;          // pause between two lines (s)
 const CHATTER_GAP = 2.5;   // quiet time needed before an unimportant line (s)
 
