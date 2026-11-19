@@ -252,7 +252,7 @@ export class Damage {
     // Speed: water in the hold and snapped masts slow her down
     let mul = Math.max(0.65, 1 - this.leaks.length * 0.06);
     for (const M of this.masts) if (M.broken) mul *= 0.6;
-    S.speedMul = mul;
+    S.speedMul = Math.max(0.3, mul);
     // Fires grow, then spread
     for (const f of [...this.fires]) {
       f.growT -= dt;

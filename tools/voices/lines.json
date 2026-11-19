@@ -366,6 +366,67 @@
       "lines": [
         "Grapples away! Haul her in!"
       ]
+    },
+    "bossArrived": {
+      "by": [
+        "Finn",
+        "Hawkins"
+      ],
+      "lines": [
+        "Big galleon off the bow! It's their captain, comin' for us!",
+        "That be the captain's own ship. Steady, lads. Steady."
+      ]
+    },
+    "bossTaunt": {
+      "by": [
+        "enemyC",
+        "enemyA",
+        "enemyC"
+      ],
+      "lines": [
+        "Ye'll never take me ship alive!",
+        "Come and face me, ye coward!",
+        "Har! Is that all ye've got?"
+      ]
+    },
+    "bossFalls": {
+      "by": [
+        "Mags",
+        "Bones"
+      ],
+      "lines": [
+        "Their captain's dead! The day is ours!",
+        "Arr, the old devil's finished!"
+      ]
+    },
+    "waveCleared": {
+      "by": [
+        "Hawkins"
+      ],
+      "lines": [
+        "The sea's ours, for now. Keep a weather eye open.",
+        "That's the lot of 'em. More sails'll be comin'."
+      ]
+    },
+    "bossNear": {
+      "by": [
+        "Hawkins"
+      ],
+      "lines": [
+        "Make ready, lads. Their captain's close."
+      ]
+    },
+    "voyageWon": {
+      "by": [
+        "Bones",
+        "Mags",
+        "Patch"
+      ],
+      "lines": [
+        "Huzzah! The voyage be won!",
+        "Yo ho ho! Drinks are on the Captain!",
+        "Har har! Rich as kings, we are!"
+      ]
     }
   }
 }

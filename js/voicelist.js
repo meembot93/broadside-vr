@@ -401,5 +401,82 @@ export const VOICE_LINES = {
    "who": "enemyA",
    "text": "Grapples away! Haul her in!"
   }
+ ],
+ "bossArrived": [
+  {
+   "id": "bossArrived1",
+   "who": "Finn",
+   "text": "Big galleon off the bow! It's their captain, comin' for us!"
+  },
+  {
+   "id": "bossArrived2",
+   "who": "Hawkins",
+   "text": "That be the captain's own ship. Steady, lads. Steady."
+  }
+ ],
+ "bossTaunt": [
+  {
+   "id": "bossTaunt1",
+   "who": "enemyC",
+   "text": "Ye'll never take me ship alive!"
+  },
+  {
+   "id": "bossTaunt2",
+   "who": "enemyA",
+   "text": "Come and face me, ye coward!"
+  },
+  {
+   "id": "bossTaunt3",
+   "who": "enemyC",
+   "text": "Har! Is that all ye've got?"
+  }
+ ],
+ "bossFalls": [
+  {
+   "id": "bossFalls1",
+   "who": "Mags",
+   "text": "Their captain's dead! The day is ours!"
+  },
+  {
+   "id": "bossFalls2",
+   "who": "Bones",
+   "text": "Arr, the old devil's finished!"
+  }
+ ],
+ "waveCleared": [
+  {
+   "id": "waveCleared1",
+   "who": "Hawkins",
+   "text": "The sea's ours, for now. Keep a weather eye open."
+  },
+  {
+   "id": "waveCleared2",
+   "who": "Hawkins",
+   "text": "That's the lot of 'em. More sails'll be comin'."
+  }
+ ],
+ "bossNear": [
+  {
+   "id": "bossNear1",
+   "who": "Hawkins",
+   "text": "Make ready, lads. Their captain's close."
+  }
+ ],
+ "voyageWon": [
+  {
+   "id": "voyageWon1",
+   "who": "Bones",
+   "text": "Huzzah! The voyage be won!"
+  },
+  {
+   "id": "voyageWon2",
+   "who": "Mags",
+   "text": "Yo ho ho! Drinks are on the Captain!"
+  },
+  {
+   "id": "voyageWon3",
+   "who": "Patch",
+   "text": "Har har! Rich as kings, we are!"
+  }
  ]
 };
