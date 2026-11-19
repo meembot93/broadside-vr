@@ -12,6 +12,12 @@ export function halfWidth(z) {
   return 3.2 * Math.sqrt(Math.max(0, 1 - u * u));
 }
 export const BALL_SPEED = 55;
+const LAMP_GEO = new THREE.SphereGeometry(0.06, 10, 8);
+const LAMP_READY = new THREE.MeshBasicMaterial({ color: 0x40ff60 });
+const LAMP_EMPTY = new THREE.MeshBasicMaterial({ color: 0xff3020 });
+const LAMP_FUSE = new THREE.MeshBasicMaterial({ color: 0xffc020 });
+// Weapon rack spot (ship-local). Items hang just inboard of this, facing starboard.
+export const RACK = { x: -2.2, z: 5.6 };
 const G_ACC = 9.81;
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
@@ -179,7 +185,12 @@ export class Ship {
       const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0, -1.3); elev.add(muzzle);
       const breech = new THREE.Object3D(); breech.position.set(0, 0.05, 0.62); elev.add(breech);
       this.root.add(outer);
-      this.cannons.push({ side: s, z, outer, elev, barrel, muzzle, breech, baseYaw: outer.rotation.y,
+      let lamp = null;
+      if (this.isPlayer) {
+        // Ready light on the carriage: green = loaded, red = reloading
+        lamp = new THREE.Mesh(LAMP_GEO, LAMP_READY); lamp.position.set(s * 1.95, 0.45, z + 0.45); this.root.add(lamp);
+      }
+      this.cannons.push({ side: s, z, outer, elev, barrel, muzzle, breech, baseYaw: outer.rotation.y, lamp,
         elevation: 0.06, yaw: 0, tElev: 0.06, tYaw: 0, reload: 0, fuse: -1, recoil: 0, inArc: false, sparkT: 0 });
     }
 
@@ -205,9 +216,9 @@ export class Ship {
       const knob = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), trimMat); knob.position.y = 0.98;
       this.lever.add(stick, knob); this.leverKnob = knob;
       this.leverAngle = 0;
-      // Weapon rack behind the main mast
-      add(new THREE.BoxGeometry(1.5, 1.2, 0.08), dark, 0, 1.2, -0.62);
-      add(new THREE.BoxGeometry(1.5, 0.1, 0.25), dark, 0, 0.5, -0.55);
+      // Weapon rack on the port side, next to the helm
+      add(new THREE.BoxGeometry(0.08, 1.2, 1.5), dark, RACK.x - 0.12, 1.2, RACK.z);
+      add(new THREE.BoxGeometry(0.25, 0.1, 1.5), dark, RACK.x - 0.05, 0.5, RACK.z);
     }
 
     // Rigging
@@ -311,6 +322,7 @@ export class Ship {
     // Cannons
     for (const c of this.cannons) {
       c.reload = Math.max(0, c.reload - dt);
+      if (c.lamp) c.lamp.material = c.fuse >= 0 ? LAMP_FUSE : c.reload > 0 ? LAMP_EMPTY : LAMP_READY;
       c.elevation = damp(c.elevation, c.tElev, 4, dt); c.yaw = damp(c.yaw, c.tYaw, 4, dt);
       c.elev.rotation.x = c.elevation; c.outer.rotation.y = c.baseYaw + c.yaw;
       c.recoil = Math.max(0, c.recoil - dt * 1.6);

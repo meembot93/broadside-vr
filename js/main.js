@@ -30,7 +30,7 @@ window.addEventListener('resize', () => {
 });
 
 G.world = makeWorld(scene);
-G.ship = new Ship(scene, { isPlayer: true, comfort: 0.45, health: 150, maxSpeed: 9.5, sail: 0.35, reloadTime: 7 });
+G.ship = new Ship(scene, { isPlayer: true, comfort: 0.45, health: 150, maxSpeed: 9.5, sail: 0.35, reloadTime: 5 });
 G.ship.leverAngle = 0.6 - 1.2 * 0.35;
 G.fx = new Effects(scene);
 G.audio = new Sound();
@@ -77,9 +77,18 @@ if (navigator.xr && navigator.xr.isSessionSupported) {
   note.textContent = window.isSecureContext ? 'This browser has no WebXR. Desktop mode works.' : 'VR needs an https:// address. Desktop mode works anywhere.';
 }
 
-function begin() {
+function begin(vr) {
   overlay.style.display = 'none';
-  if (!G.started) { G.started = true; G.hud.msg('Take the wheel, Captain!', 4); G.hud.msg('Grip the lever to set the sails', 3.5); }
+  if (G.started) return;
+  G.started = true;
+  if (vr) {
+    G.hud.msg('Welcome aboard, Captain!', 3);
+    G.hud.msg('Squeeze GRIP (the side button) to grab', 4.5);
+    G.hud.msg('Your weapons hang on the rack to your left', 4.5);
+    G.hud.msg('Reach a hand near something: it glows if you can use it', 5);
+    G.hud.msg('Cannons: hand on the back end, pull TRIGGER', 5);
+    G.hud.msg('Your crew is busy. The fighting is up to you!', 4);
+  } else { G.hud.msg('Take the wheel, Captain!', 4); G.hud.msg('Grip the lever to set the sails', 3.5); }
 }
 
 vrBtn.addEventListener('click', async () => {
@@ -87,9 +96,10 @@ vrBtn.addEventListener('click', async () => {
   try {
     xrSession = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor'] });
     await renderer.xr.setSession(xrSession);
+    G.player.onSession(xrSession);
     G.mode = 'vr'; camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0);
     G.player.equip(null);
-    begin();
+    begin(true);
     xrSession.addEventListener('end', () => { xrSession = null; G.mode = null; overlay.style.display = 'flex'; });
   } catch (e) { note.textContent = 'Could not start VR: ' + e.message; }
 });

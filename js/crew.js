@@ -15,9 +15,12 @@ export class Crew {
       const p = makePerson({ ...d.look, cutlass: d.role === 'gunner' });
       p.g.position.set(d.home[0], 0, d.home[1]);
       G.ship.root.add(p.g);
-      return { p, role: d.role, side: d.side, home: new THREE.Vector3(d.home[0], 0, d.home[1]), atkCD: 0, victim: null, cannon: null };
+      return { p, role: d.role, side: d.side, home: new THREE.Vector3(d.home[0], 0, d.home[1]), atkCD: 0, victim: null, cannon: null, fireCD: 30 };
     });
   }
+
+  // The crew only lends a hand now and then, so the captain does the real fighting.
+  playerFired() { for (const m of this.members) m.fireCD = Math.max(m.fireCD, 12); }
 
   cheer() { for (const m of this.members) m.p.cheer = 2.5; }
 
@@ -25,7 +28,7 @@ export class Crew {
     const G = this.G, S = G.ship;
     for (const m of this.members) {
       const p = m.p, pos = p.g.position;
-      m.atkCD -= dt;
+      m.atkCD -= dt; m.fireCD -= dt;
       // Defend against nearby boarders first
       let foe = null, fd = 1.7;
       for (const b of G.enemies.boarders) {
@@ -36,9 +39,9 @@ export class Crew {
       if (foe) {
         facePerson(p, foe.p.g.position.x - pos.x, foe.p.g.position.z - pos.z, dt);
         if (fd > 1.0) { const k = 1.8 * dt / fd; pos.x += (foe.p.g.position.x - pos.x) * k; pos.z += (foe.p.g.position.z - pos.z) * k; }
-        if (m.atkCD <= 0 && p.attack < 0) { p.attack = 0; m.atkCD = 1.8; m.victim = foe; }
+        if (m.atkCD <= 0 && p.attack < 0) { p.attack = 0; m.atkCD = 3.2; m.victim = foe; }
         if (p.attack > 0.62 && m.victim) {
-          if (Math.random() < 0.35) { _a.set(pos.x, 1.3, pos.z); S.root.localToWorld(_a); G.fx.hit(_a); G.audio.thud(_a); G.enemies.hitBoarder(m.victim, 1, m.victim.p.g.position.x - pos.x, m.victim.p.g.position.z - pos.z); }
+          if (Math.random() < 0.15) { _a.set(pos.x, 1.3, pos.z); S.root.localToWorld(_a); G.fx.hit(_a); G.audio.thud(_a); G.enemies.hitBoarder(m.victim, 1, m.victim.p.g.position.x - pos.x, m.victim.p.g.position.z - pos.z); }
           m.victim = null;
         }
         animatePerson(p, dt, fd > 1.0, t);
@@ -46,7 +49,7 @@ export class Crew {
       }
 
       let target = m.home, facing = null;
-      if (m.role === 'gunner' && S.alive) {
+      if (m.role === 'gunner' && S.alive && m.fireCD <= 0) {
         let best = null, bd = 1e9;
         for (const c of S.cannons) {
           if (c.side !== m.side || !c.inArc || !S.cannonReady(c)) continue;
@@ -58,7 +61,7 @@ export class Crew {
           target = _t.set(m.side * 1.25, 0, best.z + 0.35);
           if (pos.distanceTo(target) < 0.25) {
             facing = [m.side, 0];
-            if (S.lightCannon(best, 0.5)) { p.attack = 0.3; best.breech.getWorldPosition(_a); G.audio.fuse(_a); }
+            if (S.lightCannon(best, 0.5)) { p.attack = 0.3; m.fireCD = 40; best.breech.getWorldPosition(_a); G.audio.fuse(_a); }
           }
         }
       }
