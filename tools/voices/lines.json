@@ -1,0 +1,371 @@
+{
+  "_about": "Pirate voice lines. Each group is played for one kind of game event (see js/voicelines.js). Run tools/voices/make_voices.py to turn this into sounds/voice/*.ogg and js/voicelist.js. 'Arr' is always growled with a rolled R.",
+  "speakers": {
+    "Hawkins": {
+      "voice": "bm_george",
+      "speed": 0.9,
+      "pitch": -2.5,
+      "grit": 1.0
+    },
+    "Finn": {
+      "voice": "bm_daniel",
+      "speed": 1.0,
+      "pitch": -1.0,
+      "grit": 0.6
+    },
+    "Mags": {
+      "voice": "bf_emma",
+      "speed": 0.95,
+      "pitch": -1.5,
+      "grit": 0.6
+    },
+    "Bones": {
+      "voice": "bm_fable",
+      "speed": 0.92,
+      "pitch": -3.0,
+      "grit": 1.2
+    },
+    "Patch": {
+      "voice": "am_fenrir",
+      "speed": 0.92,
+      "pitch": -2.0,
+      "grit": 1.2
+    },
+    "enemyA": {
+      "voice": "am_onyx",
+      "speed": 0.95,
+      "pitch": -3.0,
+      "grit": 1.6
+    },
+    "enemyB": {
+      "voice": "bm_lewis",
+      "speed": 0.95,
+      "pitch": -3.5,
+      "grit": 1.6
+    },
+    "enemyC": {
+      "voice": "am_michael",
+      "speed": 1.0,
+      "pitch": -4.0,
+      "grit": 1.8
+    }
+  },
+  "groups": {
+    "sighted": {
+      "by": [
+        "Finn"
+      ],
+      "lines": [
+        "Arr, there she be, matey! Sail off the bow!",
+        "Sail ho! Enemy ship, Captain!",
+        "Ship on the horizon! She's flyin' the black!"
+      ]
+    },
+    "sightedMore": {
+      "by": [
+        "Finn"
+      ],
+      "lines": [
+        "Another sail, Captain! They're comin' for us!",
+        "Sail ho! Another one, Cap'n!"
+      ]
+    },
+    "sunk": {
+      "by": [
+        "Bones",
+        "Patch",
+        "Mags"
+      ],
+      "lines": [
+        "Huzzah! Send her to Davy Jones!",
+        "She's goin' down, lads! Yo ho!",
+        "Har har! That'll learn 'em!"
+      ]
+    },
+    "takingHits": {
+      "by": [
+        "Bones",
+        "Patch"
+      ],
+      "lines": [
+        "We're takin' hits!",
+        "Blast 'em! They've holed us!",
+        "Arr, she's hurtin', Captain!"
+      ]
+    },
+    "boarders": {
+      "by": [
+        "Mags"
+      ],
+      "lines": [
+        "Boarders! Draw yer steel, lads!",
+        "Repel boarders, ye dogs!"
+      ]
+    },
+    "theyGrapple": {
+      "by": [
+        "Mags"
+      ],
+      "lines": [
+        "They've thrown grapples! Stand by to repel boarders!",
+        "Grapples on the rail! Here they come!"
+      ]
+    },
+    "hooked": {
+      "by": [
+        "Finn"
+      ],
+      "lines": [
+        "Arr, we hooked her, matey!",
+        "Got her! Haulin' her alongside!",
+        "She's hooked! Haul away, lads!"
+      ]
+    },
+    "missed": {
+      "by": [
+        "Finn"
+      ],
+      "lines": [
+        "Missed her! Reloadin' the hook.",
+        "Blast! Missed, Captain."
+      ]
+    },
+    "tooFar": {
+      "by": [
+        "Finn"
+      ],
+      "lines": [
+        "She's too far, Captain! Bring us closer."
+      ]
+    },
+    "lashed": {
+      "by": [
+        "Mags"
+      ],
+      "lines": [
+        "She's lashed alongside! Over the rail, me hearties!",
+        "Board her, lads! For plunder!"
+      ]
+    },
+    "theyLashed": {
+      "by": [
+        "Mags"
+      ],
+      "lines": [
+        "They're alongside! Give 'em steel!"
+      ]
+    },
+    "prize": {
+      "by": [
+        "Mags",
+        "Hawkins"
+      ],
+      "lines": [
+        "She's ours! The prize be ours, Captain!",
+        "Strike her colours! She's ours!"
+      ]
+    },
+    "kegLit": {
+      "by": [
+        "Finn"
+      ],
+      "lines": [
+        "Fuse is lit! Run for it!",
+        "Get back aboard, Captain! She's gonna blow!"
+      ]
+    },
+    "boom": {
+      "by": [
+        "Bones",
+        "Patch"
+      ],
+      "lines": [
+        "Har har! Blew her to splinters!",
+        "Arr, what a bang! Yo ho ho!"
+      ]
+    },
+    "abandoned": {
+      "by": [
+        "Mags"
+      ],
+      "lines": [
+        "Their crew's all dead! She's driftin'!"
+      ]
+    },
+    "helmDown": {
+      "by": [
+        "Patch",
+        "Bones"
+      ],
+      "lines": [
+        "Their helmsman's down! She's steerin' wild!"
+      ]
+    },
+    "niceShot": {
+      "by": [
+        "Bones",
+        "Patch",
+        "Mags"
+      ],
+      "lines": [
+        "Fine shot, Captain!",
+        "Arr, right between the eyes!",
+        "Ha! Dropped him like a sack of spuds!"
+      ]
+    },
+    "deckClear": {
+      "by": [
+        "Mags"
+      ],
+      "lines": [
+        "Deck's clear, Captain!",
+        "That's the last of 'em!"
+      ]
+    },
+    "crewBoards": {
+      "by": [
+        "Bones",
+        "Patch",
+        "Finn",
+        "Mags"
+      ],
+      "lines": [
+        "Right behind ye, Captain!",
+        "Yo ho! For plunder!",
+        "I'm with ye, Captain!",
+        "Make way! I'm comin' over!"
+      ]
+    },
+    "capDown": {
+      "by": [
+        "Mags"
+      ],
+      "lines": [
+        "The Captain's down!"
+      ]
+    },
+    "capUp": {
+      "by": [
+        "Hawkins"
+      ],
+      "lines": [
+        "Up ye get, Captain. Back to the wheel."
+      ]
+    },
+    "sinking": {
+      "by": [
+        "Hawkins"
+      ],
+      "lines": [
+        "We're goin' down! Abandon ship!"
+      ]
+    },
+    "aground": {
+      "by": [
+        "Hawkins"
+      ],
+      "lines": [
+        "We've run aground! Steer for open water!"
+      ]
+    },
+    "welcome": {
+      "by": [
+        "Hawkins"
+      ],
+      "lines": [
+        "Welcome aboard, Captain. Ready to make sail."
+      ]
+    },
+    "order_hold": {
+      "by": [
+        "Hawkins"
+      ],
+      "lines": [
+        "Aye, holdin' her steady.",
+        "Aye aye. Steady as she goes."
+      ]
+    },
+    "order_chase": {
+      "by": [
+        "Hawkins"
+      ],
+      "lines": [
+        "Aye aye, Captain! After 'em!",
+        "Arr, we'll run 'em down!"
+      ]
+    },
+    "order_alongside": {
+      "by": [
+        "Hawkins"
+      ],
+      "lines": [
+        "Aye, bringin' us alongside.",
+        "Aye aye! Close on her, lads!"
+      ]
+    },
+    "order_heave": {
+      "by": [
+        "Hawkins"
+      ],
+      "lines": [
+        "Aye, heavin' to. Furl the sails!"
+      ]
+    },
+    "helmBack": {
+      "by": [
+        "Hawkins"
+      ],
+      "lines": [
+        "She's all yours, Captain.",
+        "Aye, the wheel's yours."
+      ]
+    },
+    "enemyBoard": {
+      "by": [
+        "enemyA",
+        "enemyB",
+        "enemyC"
+      ],
+      "lines": [
+        "Arr! Take the ship!",
+        "No quarter!",
+        "Yer gold or yer life!",
+        "Cut 'em down, lads!"
+      ]
+    },
+    "enemyTaunt": {
+      "by": [
+        "enemyA",
+        "enemyB",
+        "enemyC"
+      ],
+      "lines": [
+        "Have at ye!",
+        "Die, ye bilge rat!",
+        "Arr! Taste me steel!",
+        "I'll feed ye to the fishes!"
+      ]
+    },
+    "enemyRepel": {
+      "by": [
+        "enemyA",
+        "enemyB",
+        "enemyC"
+      ],
+      "lines": [
+        "Get off me ship, ye scurvy dog!",
+        "Repel boarders!",
+        "They're aboard! Cut 'em down!"
+      ]
+    },
+    "enemyGrapple": {
+      "by": [
+        "enemyA",
+        "enemyB"
+      ],
+      "lines": [
+        "Grapples away! Haul her in!"
+      ]
+    }
+  }
+}

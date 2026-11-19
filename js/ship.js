@@ -86,7 +86,9 @@ export class Ship {
     this.scene = scene;
     this.id = o.id || 'ship:?'; // stable network id, handed out by Ids (see ids.js)
     this.isPlayer = !!o.isPlayer;
-    this.kind = o.kind || 'brigantine'; // 'sloop' | 'brigantine' | 'galleon' (looks only)
+    this.kind = o.kind || 'brigantine'; // 'sloop' | 'brigantine' | 'galleon'
+    this.gunZ = o.gunZ || CANNON_Z;     // where the cannons sit along the deck (one per side at each)
+    this.ballDamage = o.ballDamage || 5; // hull damage each of her cannonballs does
     this.root = new THREE.Group(); this.root.rotation.order = 'YXZ'; scene.add(this.root);
     this.pos = new THREE.Vector3(o.x || 0, 0, o.z || 0);
     this.heading = o.heading || 0;
@@ -152,7 +154,7 @@ export class Ship {
 
     // Bulwark wall and rail, with a low gun port cut in the wall at each cannon
     const H = 0.95;
-    const isPort = (x, z) => Math.abs(x) > 1.5 && CANNON_Z.some((cz) => Math.abs(z - cz) < PORT_HALF);
+    const isPort = (x, z) => Math.abs(x) > 1.5 && this.gunZ.some((cz) => Math.abs(z - cz) < PORT_HALF);
     const coarse = outline.map(([x, z]) => [x * 0.99, z * 0.996]);
     const loop = [];
     for (let i = 0; i < coarse.length; i++) {
@@ -231,7 +233,7 @@ export class Ship {
 
     // Cannon carriages (barrels are separate, they move)
     // They sit on a raised gun platform so the back end is at about waist height.
-    for (const s of [-1, 1]) for (const z of CANNON_Z) {
+    for (const s of [-1, 1]) for (const z of this.gunZ) {
       add(new THREE.BoxGeometry(1.0, GUN_LIFT, 1.1), wood, s * 2.3, GUN_LIFT / 2, z);
       add(new THREE.BoxGeometry(1.04, 0.05, 1.14), dark, s * 2.3, GUN_LIFT, z);
       add(new THREE.BoxGeometry(0.62, 0.3, 0.72), dark, s * 2.3, GUN_LIFT + 0.3, z);
@@ -366,7 +368,7 @@ export class Ship {
     const coil = (x, z, r = 0.32) => { for (let i = 0; i < 3; i++) k.add(new THREE.TorusGeometry(r - i * 0.07, 0.04, 4, 12), 0xb89a66, [x, 0.04 + i * 0.06, z], [Math.PI / 2, 0, 0]); };
     barrel(2.35, -5.7); barrel(2.1, -6.35, 0.27, 0.68); crate(-2.25, -5.6, 0.62, 0.3); crate(-2.3, -5.6, 0.42, 0.9, 0.62);
     coil(-1.7, -8.4); barrel(2.45, 2.55, 0.28, 0.7); coil(-2.3, 2.4);
-    crate(2.4, 4.25, 0.55, 0.15);
+    if (!this.gunZ.some((gz) => Math.abs(gz - 4.25) < 1)) crate(2.4, 4.25, 0.55, 0.15);
     if (kind !== 'sloop') { barrel(-2.45, -1.9, 0.27, 0.7); coil(2.4, -1.8, 0.28); }
     const decor = k.mesh(); decor.matrixAutoUpdate = false; this.root.add(decor); this.geos.push(decor.geometry);
   }

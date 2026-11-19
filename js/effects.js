@@ -82,6 +82,14 @@ export class Effects {
       this.emit(pos, { vel: new THREE.Vector3(rand(-1.5, 1.5), rand(0.5, 3), rand(-1.5, 1.5)), life: rand(0.2, 0.45), s0: sz, color: 0xffa040, add: true, grav: 6 });
     }
   }
+  // A celebration rocket bursting in the sky (voyage won)
+  firework(pos, color = 0xffd060, n = 36) {
+    for (let i = 0; i < n; i++) {
+      const v = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize().multiplyScalar(rand(9, 13));
+      this.emit(pos, { vel: v, life: rand(1.1, 1.7), s0: 0.9, s1: 0.4, color, add: true, grav: 4, drag: 1.2 });
+    }
+    this.emit(pos, { life: 0.25, s0: 6, s1: 9, color: 0xffffff, add: true, alpha: 0.8 });
+  }
   hit(pos) {
     for (let i = 0; i < 8; i++) this.emit(pos, { vel: new THREE.Vector3(rand(-2, 2), rand(0, 3), rand(-2, 2)), life: rand(0.3, 0.6), s0: rand(0.08, 0.18), color: 0xfff0b0, add: true, grav: 5 });
     this.emit(pos, { life: 0.5, s0: 0.3, s1: 0.9, color: 0xdddddd, alpha: 0.6 });

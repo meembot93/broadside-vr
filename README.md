@@ -7,6 +7,12 @@ A VR pirate ship game for Meta Quest, played in the Quest Browser (WebXR + three
 Open the GitHub Pages link in the Quest Browser and press **Enter VR**.
 Add `?debug` to the address to make enemies spawn quickly and close by.
 
+The game is played in **voyages** (`js/voyages.js`): a few fights against sloops and
+brigantines, then a boss galleon under a named captain. Sink her, or board her and duel the
+captain at the wheel (killing him makes his crew jump overboard). Win and the ship is refitted
+and a harder voyage begins; lose the ship and the voyage starts over. For testing,
+`?voyage=2` starts on voyage 2 and `?wave=3` jumps to the boss fight.
+
 ## Controls
 
 **Quest:** left stick walk, right stick snap turn (45°), grip = grab, trigger = fire.
@@ -21,8 +27,10 @@ Your crew only fires a cannon now and then, so the fighting is up to you.
 
 - Plain ES modules, no build step. `index.html` loads `js/main.js`.
 - three.js r170 is vendored in `lib/` (no CDN).
-- All sounds are synthesized with WebAudio and all models are built from basic shapes in code,
-  so there are no asset files.
+- Sound effects are synthesized with WebAudio and all models are built from basic shapes in code.
+- Pirate voice lines are small Opus clips in `sounds/voice/`, made offline with the free Kokoro TTS
+  by `tools/voices/make_voices.py` from `tools/voices/lines.json` (edit lines there, then re-run it).
+  `js/voicelines.js` decides when they're said; `tools/voices.html` plays every line.
 - Needs an https address to run in VR.
 
 ## Code layout (multiplayer-ready)

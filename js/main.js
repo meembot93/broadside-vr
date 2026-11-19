@@ -5,6 +5,7 @@ import { Effects } from './effects.js';
 import { Sound } from './audio.js';
 import { Combat } from './combat.js';
 import { Enemies } from './enemies.js';
+import { Voyages } from './voyages.js';
 import { Player } from './player.js';
 import { Crew } from './crew.js';
 import { Grapples } from './grapple.js';
@@ -14,6 +15,7 @@ import { Events } from './events.js';
 import { Ids } from './ids.js';
 import { applyAction, stepPlayers, hurtPlayer } from './actions.js';
 import { wirePresentation } from './presentation.js';
+import { wireVoices } from './voicelines.js';
 import { snapshot } from './state.js';
 import { Weather, CONDITIONS } from './weather.js';
 
@@ -48,6 +50,7 @@ G.fx = new Effects(scene);
 G.audio = new Sound();
 G.combat = new Combat(G);
 G.enemies = new Enemies(G);
+G.voyages = new Voyages(G);       // waves of enemies, boss fights, victory (see voyages.js)
 G.player = new Player(G);          // you, on this headset
 G.players = [G.player];             // everyone on board; friends get added here later
 G.items = G.player.items;           // muskets and cutlass on the rack (shared by the crew of players)
@@ -63,8 +66,12 @@ const WX_KEY = 'broadside.weather';
 let wxPick = params.get('weather');
 if (!wxPick) { try { wxPick = localStorage.getItem(WX_KEY); } catch (e) { /* private mode */ } }
 if (!CONDITIONS[wxPick] && wxPick !== 'random') wxPick = 'day';
-const applyWeatherPick = () => G.weather.set(wxPick === 'random' ? Object.keys(CONDITIONS)[Math.floor(Math.random() * 4)] : wxPick, { instant: true });
+const randomWeather = () => { const k = Object.keys(CONDITIONS).filter((n) => n !== G.weather.name); return k[Math.floor(Math.random() * k.length)]; };
+const applyWeatherPick = () => G.weather.set(wxPick === 'random' ? randomWeather() : wxPick, { instant: true });
 applyWeatherPick();
+// "Surprise me": each new voyage sails into different weather, and a storm rolls in when the boss appears
+G.events.on('voyageWon', () => { if (wxPick === 'random') G.weather.set(randomWeather()); });
+G.events.on('bossArrived', () => { if (wxPick === 'random' && G.weather.target.storm < 1) G.weather.set(G.weather.target.night ? 'stormNight' : 'storm'); });
 for (const b of document.querySelectorAll('#weather button')) {
   b.classList.toggle('on', b.dataset.wx === wxPick);
   b.addEventListener('click', () => {
@@ -93,6 +100,7 @@ G.snapshot = () => snapshot(G);
 // ---------- Game events ----------
 // Effects, sounds and messages for every event are in presentation.js.
 wirePresentation(G);
+wireVoices(G);
 // Rules that react to events:
 G.events.on('playerDied', () => { G.state = 'dead'; G.stateT = 3; });
 
@@ -106,6 +114,7 @@ function resetGame() {
   for (const pl of G.players) pl.respawn();
   G.score = 0; G.state = 'play';
   G.events.emit('gameReset');
+  G.voyages.restart(); // same voyage, from its first wave
 }
 
 // ---------- Start screen ----------
@@ -126,6 +135,7 @@ function begin(vr) {
   overlay.style.display = 'none';
   if (G.started) return;
   G.started = true;
+  G.events.emit('gameStarted');
   if (vr) {
     G.hud.msg('Welcome aboard, Captain!', 3);
     G.hud.msg('Squeeze GRIP (the side button) to grab', 4.5);
@@ -228,6 +238,7 @@ function simulate(dt) {
 
   if (playing && G.started) {
     G.grapples.update(dt);
+    G.voyages.update(dt);
     G.enemies.update(dt, t);
     G.grapples.checkPrize();
     aimPlayerCannons();
@@ -273,7 +284,3 @@ function simulate(dt) {
 G.simulate = simulate;
 renderer.setAnimationLoop(tick);
 
-if (G.debug) {
-  // Testing shortcuts
-  G.enemies.spawnT = 1;
-}

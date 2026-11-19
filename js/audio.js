@@ -1,4 +1,4 @@
-// All sounds are synthesized, so there are no audio files to load.
+// All sound effects are synthesized here. Pirate voice lines are recorded clips: see voicelines.js.
 export class Sound {
   constructor() { this.ctx = null; }
 
@@ -43,11 +43,11 @@ export class Sound {
     this.gale.gain.setTargetAtTime(st * 0.07 * gust, now, 0.8);
   }
 
-  out(pos, vol = 1) {
+  out(pos, vol = 1, ref = 4, rolloff = 0.8) {
     const g = this.ctx.createGain(); g.gain.value = vol;
     if (pos) {
       const p = this.ctx.createPanner(); p.panningModel = 'HRTF'; p.distanceModel = 'inverse';
-      p.refDistance = 4; p.maxDistance = 2000; p.rolloffFactor = 0.8;
+      p.refDistance = ref; p.maxDistance = 2000; p.rolloffFactor = rolloff;
       if (p.positionX) { p.positionX.value = pos.x; p.positionY.value = pos.y; p.positionZ.value = pos.z; } else p.setPosition(pos.x, pos.y, pos.z);
       g.connect(p); p.connect(this.master);
     } else g.connect(this.master);

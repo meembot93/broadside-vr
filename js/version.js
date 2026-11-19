@@ -3,5 +3,5 @@
 //
 // EVERY change merged to main must bump VERSION by 1 and replace CHANGES with a few
 // words on what that change did (newest first, keep it to 2-4 short items).
-export const VERSION = 12;
-export const CHANGES = ['aim cannons by hand', 'crews pair off in fights'];
+export const VERSION = 15;
+export const CHANGES = ['night battles with lanterns', 'storms with rain and lightning', 'pick the weather on the title screen'];
