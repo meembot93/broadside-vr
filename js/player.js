@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { halfWidth, RACK, WHEEL_MAX } from './ship.js';
+import { halfWidth, RACK, WHEEL_MAX, BALL_SPEED } from './ship.js';
+import { waveHeight } from './waves.js';
 import { GRAPPLE_RANGE } from './grapple.js';
 import { ORDER_TEXT } from './crew.js';
 import { clamp, angleWrap, canvasTex } from './util.js';
@@ -213,7 +214,17 @@ export class Player {
   grab(h) {
     const t = this.findTarget(h);
     if (!t) { this.haptic(h, 0.08, 15); return; }
-    if (t.kind === 'cannon') { this.useCannon(h, t.c); return; }
+    if (t.kind === 'cannon') {
+      // Take hold of the cannon: move your hand to lay it, TRIGGER fires it
+      const c = t.c;
+      if (this.hands.some((o) => o !== h && o.held === 'cannon' && o.cannon === c)) return;
+      this.handPos(h, _b); this.ship.root.worldToLocal(_b);
+      h.held = 'cannon'; h.cannon = c; h.cStart = { yaw: c.yaw, elev: c.elevation, z: _b.z, y: _b.y };
+      this.G.act({ type: 'aimCannon', cannon: c.id, yaw: c.yaw, elev: c.elevation });
+      this.haptic(h, 0.35, 40);
+      if (!this.toldCannon) { this.toldCannon = true; this.G.hud.msg('Move your hand to aim the cannon', 3.5); this.G.hud.msg('TRIGGER fires. Let go and it aims itself again', 4); }
+      return;
+    }
     if (t.kind === 'support') {
       h.held = 'support'; h.supporting = t.it; t.it.support = h; this.haptic(h, 0.3, 30);
       return;
@@ -263,6 +274,7 @@ export class Player {
   release(h) {
     const it = h.held;
     if (it === 'grapple') this.G.act({ type: 'holdGrapple', hold: false });
+    if (it === 'cannon' && h.cannon) { this.G.act({ type: 'releaseCannon', cannon: h.cannon.id }); h.cannon = null; }
     if (it === 'support') { if (h.supporting) h.supporting.support = null; h.supporting = null; }
     if (it && typeof it === 'object') {
       if (it.support) { const o = it.support; it.support = null; o.supporting = null; o.held = null; }
@@ -276,6 +288,7 @@ export class Player {
     if (h.held && h.held.kind === 'musket') { this.fireMusket(h.held, h); return; }
     if (h.held === 'support' && h.supporting) { this.fireMusket(h.supporting, h.supporting.holder); return; }
     if (h.held === 'grapple') { this.fireGrapple(h); return; }
+    if (h.held === 'cannon' && h.cannon) { this.useCannon(h, h.cannon); return; }
     if (h.held) return;
     const t = this.findTarget(h);
     if (t && t.kind === 'keg') { this.lightKeg(h); return; }
@@ -295,7 +308,7 @@ export class Player {
       else if (t.kind === 'lever') text = 'GRIP and push:\nmore sail';
       else if (t.kind === 'grapple') text = this.G.grapples.anyLineOut() ? 'GRIP, TRIGGER:\ncut the lines' : 'GRIP, then move\nyour hand to aim';
       else if (t.kind === 'keg') text = 'TRIGGER to light\nthe powder keg';
-      else if (t.kind === 'cannon') text = this.G.ship.cannonReady(t.c) ? 'TRIGGER to fire!' : `Reloading... ${Math.ceil(t.c.reload)}`;
+      else if (t.kind === 'cannon') text = this.G.ship.cannonReady(t.c) ? 'TRIGGER to fire!\nGRIP to aim it' : `Reloading... ${Math.ceil(t.c.reload)}`;
     }
     const key = t ? t.kind + (t.it ? t.it.kind + this.items.indexOf(t.it) : '') + (t.c ? this.G.ship.cannons.indexOf(t.c) : '') : '';
     if (key && key !== h.hoverKey) this.haptic(h, 0.15, 15);
@@ -335,6 +348,40 @@ export class Player {
   // Light the keg on the prize you're standing on, then run for it.
   lightKeg(h) {
     if (this.G.act({ type: 'lightKeg', ship: this.ship.id }) && h) this.haptic(h, 0.6, 60);
+  }
+
+  // Holding a cannon: move your hand right and the muzzle swings right; up raises it.
+  aimCannonByHand(h) {
+    const c = h.cannon, st = h.cStart; if (!c || !st) return;
+    this.handPos(h, _b); this.ship.root.worldToLocal(_b);
+    const right = (_b.z - st.z) * c.side; // the player faces outboard, so "right" is along +z * side
+    this.G.act({ type: 'aimCannon', cannon: c.id, yaw: st.yaw - right * 1.6, elev: st.elev + (_b.y - st.y) * 1.3 });
+    this.showCannonLine(c);
+  }
+
+  // Dotted path of the ball from a hand-aimed cannon (green when it would hit a ship).
+  showCannonLine(c) {
+    const G = this.G;
+    if (!this.cannonLine) {
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(3 * 40), 3));
+      this.cannonLine = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffd25a, transparent: true, opacity: 0.75, depthWrite: false }));
+      this.cannonLine.frustumCulled = false; G.scene.add(this.cannonLine);
+    }
+    c.outer.updateMatrixWorld(true);
+    const pos = c.muzzle.getWorldPosition(new THREE.Vector3()), vel = c.elev.getWorldDirection(new THREE.Vector3()).negate().multiplyScalar(BALL_SPEED).add(G.ship.vel);
+    const pa = this.cannonLine.geometry.attributes.position;
+    let n = 0, hit = false;
+    for (let i = 0; i < 400 && n < 40; i++) {
+      if (i % 10 === 0) pa.setXYZ(n++, pos.x, pos.y, pos.z);
+      vel.y -= 9.81 * 0.01; pos.addScaledVector(vel, 0.01);
+      if (G.enemies.ships.some((e) => e.alive && e.containsWorld(pos))) { hit = true; break; }
+      if (pos.y < waveHeight(pos.x, pos.z, G.t)) break;
+    }
+    pa.setXYZ(n++, pos.x, pos.y, pos.z);
+    for (let i = n; i < 40; i++) pa.setXYZ(i, pos.x, pos.y, pos.z);
+    pa.needsUpdate = true;
+    this.cannonLine.material.color.setHex(hit ? 0x50ff60 : 0xffd25a);
+    this.cannonLineT = 0.1;
   }
 
   // Holding the grapple gun: it swings as your hand moves around it (2x, so small moves go far).
@@ -440,6 +487,7 @@ export class Player {
       h.glove.userData.palm.material.emissive.setHex(trig ? 0x7a3a10 : sq ? 0x2e2010 : 0x000000);
       if (h.held && h.held.kind === 'musket') this.aimTwoHanded(h);
       if (h.held === 'grapple') this.aimGrapple(h);
+      if (h.held === 'cannon') this.aimCannonByHand(h);
       if (h.held === 'wheel') this.updateWheel(h, dt);
       else if (h.held === 'lever') this.updateLever(h);
       this.updateHover(h);
@@ -591,6 +639,7 @@ export class Player {
   // fast you swing it is input.
   updateView(dt) {
     const G = this.G, ship = this.ship;
+    if (this.cannonLine) { this.cannonLineT = (this.cannonLineT || 0) - dt; this.cannonLine.visible = this.cannonLineT > 0; }
     if (this.orderCard) { this.orderCard.userData.set(this.orderText()); this.orderCard.visible = G.mode === 'vr' && !!this.orderCard.parent; }
     this.hurtFlash = Math.max(0, this.hurtFlash - dt * 2.5);
     const op = this.dead ? 0.85 : this.hurtFlash * 0.45 + Math.max(0, 0.5 - this.health / 100) * 0.4;

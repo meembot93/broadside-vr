@@ -149,7 +149,9 @@ export class Crew {
   defend(m, fighters, dt) {
     const G = this.G, S = G.ship, p = m.p, pos = p.g.position;
     let foe = null, fd = 1e9;
-    for (const b of fighters) { const d = pos.distanceTo(b.p.g.position); if (d < fd) { fd = d; foe = b; } }
+    // Fight the boarder who picked me, if there is one, otherwise the nearest
+    for (const b of fighters) { const d = pos.distanceTo(b.p.g.position) - (b.foe?.crew === m ? 3 : 0); if (d < fd) { fd = d; foe = b; } }
+    fd = pos.distanceTo(foe.p.g.position);
     if (m.role === 'grappler' && fd > 3) return this.grappler(m, dt);
     p.sword.visible = true;
     const fp = foe.p.g.position;
@@ -214,8 +216,16 @@ export class Crew {
     }
     p.sword.visible = true;
     let foe = null, fd = 1e9;
-    for (const c of e.crew) if (!c.p.dead) { const d = pos.distanceTo(c.p.g.position); if (d < fd) { fd = d; foe = c; } }
+    // The sailor squaring up to me first, otherwise the nearest one nobody else is fighting
+    for (const c of e.crew) {
+      if (c.p.dead) continue;
+      const taken = this.members.some((o) => o !== m && o.victimCrew === c);
+      const d = pos.distanceTo(c.p.g.position) - (c.foe === m ? 3 : 0) + (taken ? 2 : 0);
+      if (d < fd) { fd = d; foe = c; }
+    }
+    m.victimCrew = foe;
     if (!foe) return true;
+    fd = pos.distanceTo(foe.p.g.position);
     const fp = foe.p.g.position;
     let still = true;
     if (fd > 1.1) { this.walk(m, fp.x, fp.z, dt, 2.4); still = false; }

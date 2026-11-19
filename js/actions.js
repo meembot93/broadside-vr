@@ -43,6 +43,21 @@ export function applyAction(G, a) {
       }
       return c.reload > 0 ? 'reloading' : 'busy';
     }
+    // A player lays a cannon by hand (yaw: swing, elev: elevation, radians). Until released
+    // it stays where they put it instead of aiming itself.
+    case 'aimCannon': {
+      const c = G.byId(a.cannon);
+      if (!c) return false;
+      c.manual = player.id;
+      c.tYaw = c.yaw = clamp(a.yaw, -0.45, 0.45);
+      c.tElev = c.elevation = clamp(a.elev, -0.12, 0.42);
+      return true;
+    }
+    case 'releaseCannon': {
+      const c = G.byId(a.cannon);
+      if (c && c.manual === player.id) c.manual = null;
+      return true;
+    }
     // Light every cannon that has a target. Returns how many were lit.
     case 'broadside': {
       const n = G.combat.broadside(S);
