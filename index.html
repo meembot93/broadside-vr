@@ -60,6 +60,15 @@
 </div>
 <div id="crosshair"></div>
 <div id="dhud"></div>
+<script>
+  // Show when this copy of the game was published, so it's easy to tell an update arrived.
+  (() => { const d = new Date(document.lastModified), el = document.createElement('div');
+    el.id = 'build'; el.textContent = 'Updated ' + d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    el.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:13px;opacity:.6;color:#f3e3c0;font-family:Georgia,serif;z-index:20';
+    document.body.appendChild(el); })();
+  // Make every visit load the newest game files (see sw.js).
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+</script>
 <script type="module" src="./js/main.js"></script>
 </body>
 </html>
