@@ -90,7 +90,7 @@ export class Combat {
         if (s === b.owner || !s.alive) continue;
         if ((s.pos.x - p.x) ** 2 + (s.pos.z - p.z) ** 2 > 225) continue;
         if (s.containsWorld(p)) {
-          const dmg = b.owner.isPlayer ? 14 : 5;
+          const dmg = b.owner.isPlayer ? 14 : b.owner.ballDamage;
           s.damage(dmg);
           if (s === G.ship) G.damage.onHit(p); // leaks, fires, a snapped mast (damage.js)
           // Splinters: sailors close to where it hit may go down (not behind the helm shelter)

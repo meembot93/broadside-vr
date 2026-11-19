@@ -72,11 +72,13 @@ export class Hud {
   enemyBar(e) {
     let b = this.enemyBars.get(e);
     if (!b) {
-      const tex = canvasTex(256, 40, () => {});
+      // A boss gets her captain's name over the bar
+      const H = e.boss ? 76 : 40;
+      const tex = canvasTex(256, H, () => {});
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
-      sprite.position.set(0, 17.2, -1); sprite.renderOrder = 5;
+      sprite.position.set(0, e.boss ? 18 : 17.2, -1); sprite.renderOrder = 5;
       e.root.add(sprite);
-      b = { sprite, tex, shown: -1 };
+      b = { sprite, tex, shown: -1, H };
       this.enemyBars.set(e, b);
     }
     return b;
@@ -93,16 +95,21 @@ export class Hud {
       const v = Math.max(0, Math.min(1, e.health / e.maxHealth));
       if (Math.abs(v - b.shown) > 0.004) {
         b.shown = v;
-        const g = b.tex.userData.ctx;
-        g.clearRect(0, 0, 256, 40);
-        g.fillStyle = 'rgba(20,12,6,0.75)'; g.fillRect(0, 0, 256, 40);
-        g.fillStyle = v > 0.35 ? '#c0392b' : '#ff7a2a'; g.fillRect(6, 6, 244 * v, 28);
-        g.strokeStyle = '#e8c77a'; g.lineWidth = 4; g.strokeRect(2, 2, 252, 36);
+        const g = b.tex.userData.ctx, y = b.H - 40;
+        g.clearRect(0, 0, 256, b.H);
+        if (e.boss) {
+          g.fillStyle = 'rgba(20,12,6,0.75)'; g.fillRect(0, 0, 256, y);
+          g.fillStyle = '#ffd25a'; g.font = 'bold 24px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+          g.fillText(e.boss.name, 128, y / 2 + 1, 244);
+        }
+        g.fillStyle = 'rgba(20,12,6,0.75)'; g.fillRect(0, y, 256, 40);
+        g.fillStyle = v > 0.35 ? '#c0392b' : '#ff7a2a'; g.fillRect(6, y + 6, 244 * v, 28);
+        g.strokeStyle = e.boss ? '#ffd25a' : '#e8c77a'; g.lineWidth = 4; g.strokeRect(2, y + 2, 252, 36);
         b.tex.needsUpdate = true;
       }
       // Grow with distance so it stays readable far away
       const w = Math.max(6, e.root.position.distanceTo(_a) * 0.075);
-      b.sprite.scale.set(w, w * 40 / 256, 1);
+      b.sprite.scale.set(w, w * b.H / 256, 1);
     }
   }
 
@@ -149,8 +156,9 @@ export class Hud {
     const dmg = this.damageText();
     if (dmg) { g.font = 'bold 18px Georgia, serif'; g.fillStyle = '#a02a1a'; g.fillText(dmg, 20, 229); g.font = '24px Georgia, serif'; }
     g.fillStyle = '#3a2210';
-    g.fillText(`Ships sunk: ${G.score}`, 20, 250);
-    g.fillText(`Speed: ${(S.speed * 1.94).toFixed(1)} kn`, 270, 250);
+    const V = G.voyages;
+    g.fillText(V.n ? `Voyage ${V.n}, fight ${Math.max(1, V.wave)} of ${V.waves.length}` : `Ships sunk: ${G.score}`, 20, 250);
+    g.textAlign = 'right'; g.fillText(`${(S.speed * 1.94).toFixed(1)} kn`, w - 20, 250); g.textAlign = 'left';
     // Nearest enemy
     let best = null, bd = 1e9;
     for (const e of G.enemies.ships) if (e.alive) { const d = e.pos.distanceTo(S.pos); if (d < bd) { bd = d; best = e; } }
@@ -160,10 +168,10 @@ export class Hud {
       const r = ((rel % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI; // -pi..pi, positive = to port
       const deg = (r * 180) / Math.PI;
       const where = Math.abs(deg) < 25 ? 'dead ahead' : Math.abs(deg) > 155 ? 'astern' : deg > 0 ? 'to port' : 'to starboard';
-      g.fillStyle = '#7a1a10'; g.fillText(`Enemy ${Math.round(bd)} m ${where}`, 20, 296);
+      g.fillStyle = '#7a1a10'; g.fillText(`${best.boss ? best.boss.name : 'Enemy'} ${Math.round(bd)} m ${where}`, 20, 296, w - 40);
       g.font = '20px Georgia, serif'; g.fillStyle = '#3a2210';
       g.fillText(`(their hull ${Math.round((best.health / best.maxHealth) * 100)}%)`, 20, 322);
-    } else { g.fillText('Horizon is clear', 20, 296); }
+    } else { g.fillText(V.phase === 'won' ? 'Voyage won! Huzzah!' : 'Horizon is clear', 20, 296); }
     this.boardTex.needsUpdate = true;
   }
 
@@ -206,6 +214,7 @@ export class Hud {
     const G = this.G;
     if (G.mode !== 'desktop') return;
     const held = G.player.deskItem ? G.player.deskItem.kind : 'empty hands';
-    this.dom.innerHTML = `Health ${Math.round(G.player.health)} &nbsp;|&nbsp; Hull ${Math.round(G.ship.health)} &nbsp;|&nbsp; Sunk ${G.score} &nbsp;|&nbsp; Holding: ${held}${G.ship.speedMul < 1 || this.damageText() ? ' &nbsp;|&nbsp; ' + this.damageText() : ''}`;
+    const V = G.voyages, vtxt = V.n ? `Voyage ${V.n} fight ${Math.max(1, V.wave)}/${V.waves.length}` : `Sunk ${G.score}`;
+    this.dom.innerHTML = `Health ${Math.round(G.player.health)} &nbsp;|&nbsp; Hull ${Math.round(G.ship.health)} &nbsp;|&nbsp; ${vtxt} &nbsp;|&nbsp; Holding: ${held}${this.damageText() ? ' &nbsp;|&nbsp; ' + this.damageText() : ''}`;
   }
 }
