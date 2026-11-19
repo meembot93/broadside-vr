@@ -29,8 +29,9 @@ n = 1
 while f'{a.group}_rec{n}' in rec: n += 1
 cid = f'{a.group}_rec{n}'
 
-trim = 'silenceremove=start_periods=1:start_threshold=-40dB:start_silence=0.08'
+trim = 'silenceremove=start_periods=1:start_threshold=-34dB:start_silence=0.1'
 af = ['highpass=f=80', 'afftdn=nf=-30',                                # rumble and phone hiss
+      'loudnorm=I=-16:TP=-1.5',                                       # level first so the trim works on quiet takes too
       trim, 'areverse', trim, 'areverse',                             # cut silence at both ends
       'acompressor=threshold=-20dB:ratio=3:attack=5:release=120',     # even out loud and soft words
       'loudnorm=I=-16:TP=-1.5:LRA=11', 'apad=pad_dur=0.05']

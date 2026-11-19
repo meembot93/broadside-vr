@@ -1,0 +1,32 @@
+{
+  "boarders_rec1": {
+    "group": "boarders",
+    "who": "Mags",
+    "text": "Boarders! Draw yer steel, lads!",
+    "pitch": 1
+  },
+  "enemyBoard_rec1": {
+    "group": "enemyBoard",
+    "who": "enemyB",
+    "text": "No quarter! Take the ship! Make 'em walk the plank!",
+    "pitch": -3.0
+  },
+  "sunk_rec1": {
+    "group": "sunk",
+    "who": "Bones",
+    "text": "Huzzah! Send her to Davy Jones!",
+    "pitch": -3
+  },
+  "bossArrived_rec1": {
+    "group": "bossArrived",
+    "who": "Hawkins",
+    "text": "That be the captain's own galleon. Steady, lads. There's money in a pack.",
+    "pitch": -2
+  },
+  "voyageWon_rec1": {
+    "group": "voyageWon",
+    "who": "Bones",
+    "text": "Yo ho ho! The voyage be won, me hearties!",
+    "pitch": -3
+  }
+}

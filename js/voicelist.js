@@ -33,19 +33,10 @@ export const VOICE_LINES = {
  ],
  "sunk": [
   {
-   "id": "sunk1",
+   "id": "sunk_rec1",
    "who": "Bones",
-   "text": "Huzzah! Send her to Davy Jones!"
-  },
-  {
-   "id": "sunk2",
-   "who": "Patch",
-   "text": "She's goin' down, lads! Yo ho!"
-  },
-  {
-   "id": "sunk3",
-   "who": "Mags",
-   "text": "Har har! That'll learn 'em!"
+   "text": "Huzzah! Send her to Davy Jones!",
+   "recorded": true
   }
  ],
  "takingHits": [
@@ -67,14 +58,10 @@ export const VOICE_LINES = {
  ],
  "boarders": [
   {
-   "id": "boarders1",
+   "id": "boarders_rec1",
    "who": "Mags",
-   "text": "Boarders! Draw yer steel, lads!"
-  },
-  {
-   "id": "boarders2",
-   "who": "Mags",
-   "text": "Repel boarders, ye dogs!"
+   "text": "Boarders! Draw yer steel, lads!",
+   "recorded": true
   }
  ],
  "theyGrapple": [
@@ -337,24 +324,10 @@ export const VOICE_LINES = {
  ],
  "enemyBoard": [
   {
-   "id": "enemyBoard1",
-   "who": "enemyA",
-   "text": "Arr! Take the ship!"
-  },
-  {
-   "id": "enemyBoard2",
+   "id": "enemyBoard_rec1",
    "who": "enemyB",
-   "text": "No quarter!"
-  },
-  {
-   "id": "enemyBoard3",
-   "who": "enemyC",
-   "text": "Yer gold or yer life!"
-  },
-  {
-   "id": "enemyBoard4",
-   "who": "enemyA",
-   "text": "Cut 'em down, lads!"
+   "text": "No quarter! Take the ship! Make 'em walk the plank!",
+   "recorded": true
   }
  ],
  "enemyTaunt": [
@@ -405,14 +378,10 @@ export const VOICE_LINES = {
  ],
  "bossArrived": [
   {
-   "id": "bossArrived1",
-   "who": "Finn",
-   "text": "Big galleon off the bow! It's their captain, comin' for us!"
-  },
-  {
-   "id": "bossArrived2",
+   "id": "bossArrived_rec1",
    "who": "Hawkins",
-   "text": "That be the captain's own ship. Steady, lads. Steady."
+   "text": "That be the captain's own galleon. Steady, lads. There's money in a pack.",
+   "recorded": true
   }
  ],
  "bossTaunt": [
@@ -465,19 +434,10 @@ export const VOICE_LINES = {
  ],
  "voyageWon": [
   {
-   "id": "voyageWon1",
+   "id": "voyageWon_rec1",
    "who": "Bones",
-   "text": "Huzzah! The voyage be won!"
-  },
-  {
-   "id": "voyageWon2",
-   "who": "Mags",
-   "text": "Yo ho ho! Drinks are on the Captain!"
-  },
-  {
-   "id": "voyageWon3",
-   "who": "Patch",
-   "text": "Har har! Rich as kings, we are!"
+   "text": "Yo ho ho! The voyage be won, me hearties!",
+   "recorded": true
   }
  ]
 };
