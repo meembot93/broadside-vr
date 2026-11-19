@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Broadside VR</title>
+<link rel="icon" href="data:,">
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#05080c;font-family:Georgia,'Times New Roman',serif;color:#f3e6c4}
+  canvas{display:block}
+  #overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:radial-gradient(circle at 50% 40%,#1d3347,#05080c 75%);z-index:10;text-align:center;padding:20px;box-sizing:border-box}
+  h1{font-size:56px;margin:0 0 6px;letter-spacing:3px;color:#e8c77a;text-shadow:0 3px 0 #3b2414}
+  .sub{opacity:.8;margin-bottom:26px;font-style:italic}
+  button{font:inherit;font-size:22px;padding:14px 30px;margin:8px;border-radius:10px;border:2px solid #c9a75b;
+    background:#3b2414;color:#f3e6c4;cursor:pointer}
+  button:hover{background:#56351d}
+  button:disabled{opacity:.4;cursor:default}
+  #note{margin-top:10px;font-size:15px;opacity:.75;min-height:20px}
+  .help{display:flex;gap:40px;margin-top:26px;font-size:14px;line-height:1.55;text-align:left;opacity:.85;flex-wrap:wrap;justify-content:center}
+  .help b{color:#e8c77a}
+  #crosshair{position:fixed;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;
+    background:rgba(255,240,200,.85);z-index:5;display:none;pointer-events:none}
+  #dhud{position:fixed;left:14px;bottom:12px;z-index:5;font-size:14px;line-height:1.5;text-shadow:0 1px 2px #000;display:none;pointer-events:none}
+</style>
+<script type="importmap">
+{ "imports": { "three": "./lib/three.module.js", "three/addons/": "./lib/addons/" } }
+</script>
+</head>
+<body>
+<div id="overlay">
+  <h1>BROADSIDE</h1>
+  <div class="sub">A pirate ship, an open sea, and trouble on the horizon.</div>
+  <div>
+    <button id="vrBtn" disabled>Enter VR</button>
+    <button id="deskBtn">Play on desktop</button>
+  </div>
+  <div id="note">Checking for VR support…</div>
+  <div class="help">
+    <div><b>Quest controls</b><br>
+      Left stick: walk the deck<br>
+      Right stick: snap turn<br>
+      Grip: grab the wheel, sail lever, muskets, sword<br>
+      Trigger: fire a held musket<br>
+      Trigger with an empty hand at a cannon's back end: light the fuse</div>
+    <div><b>Desktop controls</b> (for testing)<br>
+      Click to capture the mouse, WASD to walk<br>
+      Q / E: turn the wheel, R / F: raise or lower sails<br>
+      1 musket, 2 sword, 3 empty hands<br>
+      Click: fire / swing / light the cannon you look at<br>
+      Space: fire every loaded cannon that has a target</div>
+  </div>
+</div>
+<div id="crosshair"></div>
+<div id="dhud"></div>
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>
