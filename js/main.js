@@ -176,6 +176,7 @@ function aimPlayerCannons() {
   const rank = (e) => e.pos.distanceTo(S.pos) + (e.hostile ? 0 : 1e4);
   const enemies = G.enemies.ships.filter((e) => e.alive).sort((a, b) => rank(a) - rank(b));
   for (const c of S.cannons) {
+    if (c.manual) { c.inArc = false; c.targetHostile = false; continue; } // a player is laying this one by hand
     c.inArc = false; c.targetHostile = false;
     for (const e of enemies) if (S.aimCannon(c, e, 0)) { c.inArc = true; c.targetHostile = e.hostile; break; }
     if (!c.inArc) { c.tElev = 0.06; c.tYaw = 0; }

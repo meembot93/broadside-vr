@@ -13,7 +13,7 @@ function shipState(s) {
     id: s.id, alive: s.alive, health: r2(s.health),
     pos: [r2(s.pos.x), r2(s.pos.z)], heading: r3(s.heading), speed: r2(s.speed),
     sail: r3(s.sail), rudder: r3(s.rudder), wheel: r3(s.wheelAngle), lever: r3(s.leverAngle ?? 0), sinkT: r2(s.sinkT),
-    cannons: s.cannons.map((c) => ({ id: c.id, reload: r2(c.reload), fuse: r2(c.fuse), elev: r3(c.tElev), yaw: r3(c.tYaw) })),
+    cannons: s.cannons.map((c) => ({ id: c.id, reload: r2(c.reload), fuse: r2(c.fuse), elev: r3(c.tElev), yaw: r3(c.tYaw), manual: c.manual || null })),
     crew: s.crew.map((m) => ({ id: m.id, role: m.role, dead: m.p.dead, pos: v3(m.p.g.position), pose: m.p.pose })),
     ai: s.ai ? { mode: s.ai.mode } : undefined,
     abandoned: !!s.abandoned, captured: !!s.captured, keg: s.keg ? r2(s.keg.fuse) : null, helmBy: s.helmBy,
