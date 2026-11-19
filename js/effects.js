@@ -16,6 +16,7 @@ const _p = new THREE.Vector3();
 export class Effects {
   constructor(scene, max = 280) {
     this.tex = puffTex(); this.pool = []; this.active = [];
+    this.shade = 1; // smoke and spray are darkened at night and in storms (set by weather.js)
     for (let i = 0; i < max; i++) {
       const m = new THREE.SpriteMaterial({ map: this.tex, transparent: true, depthWrite: false });
       const s = new THREE.Sprite(m); s.visible = false; s.frustumCulled = false; scene.add(s);
@@ -31,7 +32,7 @@ export class Effects {
     const p = this.pool.pop(); if (!p) return;
     p.s.position.copy(pos); p.vel.copy(o.vel || ZERO);
     p.life = 0; p.max = o.life; p.s0 = o.s0; p.s1 = o.s1 ?? o.s0; p.grav = o.grav || 0; p.drag = o.drag || 0; p.alpha = o.alpha ?? 1;
-    const m = p.s.material; m.color.set(o.color); m.blending = o.add ? THREE.AdditiveBlending : THREE.NormalBlending; m.rotation = Math.random() * 6.28;
+    const m = p.s.material; m.color.set(o.color); if (!o.add) m.color.multiplyScalar(this.shade); m.blending = o.add ? THREE.AdditiveBlending : THREE.NormalBlending; m.rotation = Math.random() * 6.28;
     p.s.scale.setScalar(p.s0); m.opacity = p.alpha;
     p.s.visible = true; this.active.push(p);
   }

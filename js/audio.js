@@ -20,6 +20,9 @@ export class Sound {
     };
     this.waveA = mk('lowpass', 380, 0.12); this.waveB = mk('lowpass', 900, 0.04);
     this.wind = mk('bandpass', 1400, 0.0);
+    // Storm layers (silent in fair weather): hiss of rain and a low howling wind
+    this.rain = mk('highpass', 2600, 0.0); this.gale = mk('bandpass', 420, 0.0);
+    this.storm = this.storm || 0;
   }
 
   get ok() { return !!this.ctx; }
@@ -34,7 +37,10 @@ export class Sound {
     } else { L.setPosition(pos.x, pos.y, pos.z); L.setOrientation(fwd.x, fwd.y, fwd.z, up.x, up.y, up.z); }
     this.waveA.gain.setTargetAtTime(0.1 + 0.05 * Math.sin(t * 0.7), now, 0.3);
     this.waveB.gain.setTargetAtTime(0.03 + 0.025 * Math.sin(t * 1.1 + 1), now, 0.3);
-    this.wind.gain.setTargetAtTime(0.008 + speed * 0.006, now, 0.5);
+    const st = this.storm || 0, gust = 0.6 + 0.4 * Math.sin(t * 0.37) * Math.sin(t * 0.23 + 1);
+    this.wind.gain.setTargetAtTime(0.008 + speed * 0.006 + st * 0.03 * gust, now, 0.5);
+    this.rain.gain.setTargetAtTime(st * 0.05, now, 0.8);
+    this.gale.gain.setTargetAtTime(st * 0.07 * gust, now, 0.8);
   }
 
   out(pos, vol = 1) {
@@ -123,6 +129,19 @@ export class Sound {
   cheer() {
     if (!this.ctx) return; const o = this.out(null, 0.4);
     for (let i = 0; i < 4; i++) this.noise(o, { type: 'bandpass', f: 600 + i * 150, f2: 900 + i * 120, q: 4, peak: 0.3, a: 0.08, d: 0.6, t0: i * 0.07 });
+  }
+  // Thunder: a sharp crack when close, then a long low rumble (delay = how far off the bolt was)
+  thunder(pos, delay = 0, near = 0.5) {
+    if (!this.ctx) return; const c = this.ctx, o = this.out(null, 0.9), t = c.currentTime + delay;
+    const roll = (f, peak, a, d, t0) => {
+      const src = c.createBufferSource(); src.buffer = this.noiseBuf; src.loop = true;
+      const fl = c.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.setValueAtTime(f, t + t0); fl.frequency.exponentialRampToValueAtTime(60, t + t0 + a + d);
+      const g = c.createGain(); g.gain.setValueAtTime(0.0001, t + t0); g.gain.exponentialRampToValueAtTime(peak, t + t0 + a); g.gain.exponentialRampToValueAtTime(0.0001, t + t0 + a + d);
+      src.connect(fl); fl.connect(g); g.connect(o); src.start(t + t0, Math.random() * 1.5); src.stop(t + t0 + a + d + 0.1);
+    };
+    if (near > 0.4) roll(3000, near * 0.9, 0.005, 0.5, 0);
+    roll(320, 0.5 + near * 0.4, 0.15, 2.8 + Math.random() * 1.5, 0.05);
+    roll(140, 0.4, 0.4, 2.5, 0.6 + Math.random() * 0.6);
   }
   creak(pos) {
     if (!this.ctx) return; const o = this.out(pos, 0.25);

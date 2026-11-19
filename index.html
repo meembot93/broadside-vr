@@ -17,6 +17,9 @@
   button:hover{background:#56351d}
   button:disabled{opacity:.4;cursor:default}
   #version{font-size:17px;color:#ffd25a;margin-bottom:6px;text-align:center;padding:0 16px}
+  #weather{margin-top:14px;font-size:17px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px}
+  #weather button{font-size:16px;padding:7px 14px;margin:3px;border-width:1px;opacity:.7}
+  #weather button.on{opacity:1;background:#7a4d22;border-color:#ffd25a;box-shadow:0 0 8px #e8c77a88}
   #note{margin-top:10px;font-size:15px;opacity:.75;min-height:20px}
   .help{display:flex;gap:40px;margin-top:26px;font-size:14px;line-height:1.55;text-align:left;opacity:.85;flex-wrap:wrap;justify-content:center}
   .help b{color:#e8c77a}
@@ -36,6 +39,9 @@
   <div>
     <button id="vrBtn" disabled>Enter VR</button>
     <button id="deskBtn">Play on desktop</button>
+  </div>
+  <div id="weather"><span>Sail into:&nbsp;</span>
+    <button data-wx="day">Fair day</button><button data-wx="night">Night</button><button data-wx="storm">Storm</button><button data-wx="stormNight">Stormy night</button><button data-wx="random">Surprise me</button>
   </div>
   <div id="note">Checking for VR support…</div>
   <div class="help">

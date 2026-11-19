@@ -428,7 +428,8 @@ export class Ship {
       roll += this.sinkTilt * Math.min(0.6, u * 0.06);
     }
     this.pitch = damp(this.pitch, pitch, 3, dt); this.roll = damp(this.roll, roll, 3, dt);
-    this.bob = damp(this.bob, hc * (0.6 + 0.4 * this.comfort), 4, dt);
+    // heave: how much of the swell's rise and fall the hull follows (weather.js eases it for our ship in a storm)
+    this.bob = damp(this.bob, hc * (this.heave ?? (0.6 + 0.4 * this.comfort)), 4, dt);
     this.root.position.set(this.pos.x, this.bob + 1.3 - sink, this.pos.z);
     this.root.rotation.set(this.pitch, this.heading, this.roll);
     this.root.updateMatrixWorld(true);
