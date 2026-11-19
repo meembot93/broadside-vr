@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { makePerson, animatePerson, facePerson } from './people.js';
 import { halfWidth, HELM_SPOT, WHEEL_MAX, LEVER_MAX } from './ship.js';
+import { GUN } from './grapple.js';
 import { clamp, angleWrap, rand } from './util.js';
 
-const _a = new THREE.Vector3(), _t = new THREE.Vector3();
+const _a = new THREE.Vector3(), _t = new THREE.Vector3(), _b = new THREE.Vector3(), _q = new THREE.Quaternion();
 
 // Orders the captain can give the helmsman (cycled with A / X in VR, T on desktop).
 export const ORDERS = ['hold', 'chase', 'alongside', 'heave'];
@@ -15,7 +16,6 @@ export const ORDER_TEXT = {
 };
 
 // Spots on deck (ship-local x, z) where the crew have work to do.
-const BOW_SPOTS = [[1.3, -6.8], [-1.3, -6.6], [1.1, -7.8]]; // clear of the grapple gun
 const ODD_JOBS = [[1.9, -4.6], [-1.9, -4.4], [1.6, 2.9], [-1.5, 3.1], [0.9, -2.4], [-0.9, -6.0]];
 const HELM_STANDBY = [1.75, 4.3];
 
@@ -25,26 +25,27 @@ export class Crew {
     const defs = [
       { look: { type: 'gunner', bandana: 0xa82020, pants: 0x3b4a6b, hair: 0x3a2414, seed: 11 }, role: 'gunner', side: -1, home: [-1.15, -1.6], name: 'Bones' },
       { look: { type: 'gunner', bandana: 0x2f5a8a, pants: 0x4a3b2b, patch: true, seed: 12 }, role: 'gunner', side: 1, home: [1.15, -1.6], name: 'Patch' },
-      { look: { type: 'deckhand', bandana: 0x6a8aa0, skin: 0x8d5a3b, seed: 13 }, role: 'lookout', side: 0, home: [1.3, -6.8], name: 'Finn' },
+      { look: { type: 'deckhand', bandana: 0x6a8aa0, skin: 0x8d5a3b, seed: 13 }, role: 'grappler', side: 0, home: [0.0, -7.6], name: 'Finn' },
       { look: { type: 'swashbuckler', skin: 0xa8734f, seed: 14 }, role: 'bosun', side: 0, home: [-1.5, 3.1], name: 'Mags' },
       { look: { type: 'sailor', vest: 0x24304a, hat: 0x3a2a20, beard: 0x8a8a8a, patch: false, seed: 15 }, role: 'helmsman', side: 0, home: HELM_STANDBY, name: 'Hawkins' },
     ];
     this.members = defs.map((d, i) => {
-      const p = makePerson({ ...d.look, cutlass: d.role === 'gunner' });
+      const p = makePerson({ ...d.look, cutlass: false }); // swords come out when there's a fight
       p.g.position.set(d.home[0], 0, d.home[1]);
       G.ship.root.add(p.g);
-      return { id: `crew:${i}`, name: d.name, p, role: d.role, side: d.side, home: new THREE.Vector3(d.home[0], 0, d.home[1]), atkCD: 0, victim: null, cannon: null, fireCD: 30,
-        spot: null, spotT: 0, workT: 0, lastSail: null };
+      return { id: `crew:${i}`, name: d.name, p, role: d.role, side: d.side, home: new THREE.Vector3(d.home[0], 0, d.home[1]), atkCD: 0, victim: null, cannon: null, fireCD: 8,
+        spot: null, spotT: 0, workT: 0, lastSail: null, aimT: 0, away: null };
     });
     this.hm = this.members[4];
     // The helm: who steers (a player id, the helmsman's id, or null = wheel left where it is)
     G.ship.helmBy = 'player:0'; G.ship.helmTouchT = 0; G.ship.holdHeading = G.ship.heading;
-    this.order = 'hold';
+    this.order = 'chase';
     this.awayT = 0;
   }
 
   // The crew only lends a hand now and then, so the captain does the real fighting.
-  playerFired() { for (const m of this.members) m.fireCD = Math.max(m.fireCD, 12); }
+  // (but they do keep the guns firing between your own shots).
+  playerFired() { for (const m of this.members) m.fireCD = Math.max(m.fireCD, 5); }
 
   cheer() { for (const m of this.members) m.p.cheer = 2.5; }
 
@@ -125,58 +126,158 @@ export class Crew {
   update(dt, t) {
     const G = this.G, S = G.ship;
     if (G.started) this.updateHelm(dt);
+    const fighters = G.enemies.boarders.filter((b) => b.state === 'fight');
     for (const m of this.members) {
-      const p = m.p, pos = p.g.position;
+      const p = m.p;
       m.atkCD -= dt; m.fireCD -= dt; p.pose = null;
-      // Defend against nearby boarders first
-      let foe = null, fd = 1.7;
-      for (const b of G.enemies.boarders) {
-        if (b.state !== 'fight') continue;
-        const d = pos.distanceTo(b.p.g.position);
-        if (d < fd) { fd = d; foe = b; }
-      }
-      if (foe && !(m === this.hm && S.helmBy === m.id)) {
-        facePerson(p, foe.p.g.position.x - pos.x, foe.p.g.position.z - pos.z, dt);
-        if (fd > 1.0) { const k = 1.8 * dt / fd; pos.x += (foe.p.g.position.x - pos.x) * k; pos.z += (foe.p.g.position.z - pos.z) * k; }
-        if (m.atkCD <= 0 && p.attack < 0) { p.attack = 0; m.atkCD = 3.2; m.victim = foe; }
-        if (p.attack > 0.62 && m.victim) {
-          if (Math.random() < 0.15) { _a.set(pos.x, 1.3, pos.z); S.root.localToWorld(_a); G.events.emit('bladeContact', { pos: _a }); G.events.emit('boarderStruck', { pos: _a }); G.enemies.hitBoarder(m.victim, 1, m.victim.p.g.position.x - pos.x, m.victim.p.g.position.z - pos.z); }
-          m.victim = null;
-        }
-        animatePerson(p, dt, fd > 1.0, t);
-        continue;
-      }
-      const moving = !this[m.role](m, dt, t);
-      animatePerson(p, dt, moving, t);
+      let still;
+      if (m.away || this.joinsBoarding(m)) still = this.boarding(m, dt);
+      else if (fighters.length && this.defends(m)) still = this.defend(m, fighters, dt);
+      else { p.sword.visible = false; still = this[m.role](m, dt, t); }
+      animatePerson(p, dt, !still, t);
     }
   }
 
+  // Who drops their job to fight boarders: everyone but the man at the wheel and the man on
+  // the grapple gun (unless they're right on top of him).
+  defends(m) {
+    if (m === this.hm && this.G.ship.helmBy === m.id) return false;
+    return true;
+  }
+
+  // Swords out: go for the nearest boarder and cut at him.
+  defend(m, fighters, dt) {
+    const G = this.G, S = G.ship, p = m.p, pos = p.g.position;
+    let foe = null, fd = 1e9;
+    for (const b of fighters) { const d = pos.distanceTo(b.p.g.position); if (d < fd) { fd = d; foe = b; } }
+    if (m.role === 'grappler' && fd > 3) return this.grappler(m, dt);
+    p.sword.visible = true;
+    const fp = foe.p.g.position;
+    let still = true;
+    if (fd > 1.1) { this.walk(m, fp.x, fp.z, dt, 2.6); still = false; }
+    facePerson(p, fp.x - pos.x, fp.z - pos.z, dt);
+    if (fd < 1.5 && m.atkCD <= 0 && p.attack < 0) { p.attack = 0; m.atkCD = rand(1.3, 1.9); m.victim = foe; }
+    if (p.attack > 0.62 && m.victim) {
+      _a.set(pos.x, 1.3, pos.z); S.root.localToWorld(_a);
+      if (Math.random() < 0.4 && m.victim.state === 'fight') { G.events.emit('bladeContact', { pos: _a }); G.events.emit('boarderStruck', { pos: _a }); G.enemies.hitBoarder(m.victim, 1, m.victim.p.g.position.x - pos.x, m.victim.p.g.position.z - pos.z); }
+      else G.events.emit('parried', { pos: _a });
+      m.victim = null;
+    }
+    return still;
+  }
+
+  // ---------- Boarding parties ----------
+  // When the captain climbs onto a lashed enemy ship, the gunners and the bosun follow.
+  joinsBoarding(m) {
+    if (m.role !== 'gunner' && m.role !== 'bosun') return false;
+    return !!this.boardTarget();
+  }
+  boardTarget() {
+    const G = this.G;
+    for (const pl of G.players) {
+      const e = pl.ship;
+      if (e === G.ship || pl.dead || !e.alive || e.keg?.fuse >= 0) continue;
+      if (G.grapples.linkedShip(G.ship) === e && e.crew.some((c) => !c.p.dead)) return e;
+    }
+    return null;
+  }
+
+  // Jump across, fight their crew, jump back when it's over.
+  boarding(m, dt) {
+    const G = this.G, S = G.ship, p = m.p, pos = p.g.position;
+    const target = this.boardTarget();
+    if (!m.away) {
+      // Start the jump: from our rail to their deck
+      const e = target, side = Math.sign(G.grapples.lockFor(e).side) || 1;
+      if (!this.walk(m, side * (halfWidth(pos.z) - 0.6), clamp(pos.z, -4, 3), dt, 3)) return false;
+      this.jump(m, e, -side * (halfWidth(pos.z) - 1.0), pos.z + rand(-0.8, 0.8));
+      G.events.emit('crewBoards', { name: m.name, pos: p.g.getWorldPosition(_a) });
+    }
+    const A = m.away;
+    if (A.state === 'jump') {
+      A.t += dt / 0.9; const u = Math.min(1, A.t);
+      pos.lerpVectors(A.from, A.to, u); pos.y += Math.sin(Math.PI * u) * 1.2;
+      facePerson(p, A.to.x - A.from.x, A.to.z - A.from.z, dt, 20);
+      if (u >= 1) { pos.y = 0; A.state = A.ship === S ? 'done' : 'fight'; }
+      if (A.state === 'done') { m.away = null; p.sword.visible = false; }
+      return false;
+    }
+    // Fighting on their deck
+    const e = A.ship;
+    if (!target || target !== e) {
+      // Time to go home: back over the rail
+      const side = Math.sign(G.grapples.lockFor(e)?.side || 1);
+      if (!e.alive || !G.grapples.lockFor(e)) { this.jump(m, S, m.home.x, m.home.z, true); return false; }
+      if (!this.walk(m, -side * (halfWidth(pos.z) - 0.6), clamp(pos.z, -4, 3), dt, 3)) return false;
+      this.jump(m, S, side * (halfWidth(pos.z) - 1.0), pos.z);
+      return false;
+    }
+    p.sword.visible = true;
+    let foe = null, fd = 1e9;
+    for (const c of e.crew) if (!c.p.dead) { const d = pos.distanceTo(c.p.g.position); if (d < fd) { fd = d; foe = c; } }
+    if (!foe) return true;
+    const fp = foe.p.g.position;
+    let still = true;
+    if (fd > 1.1) { this.walk(m, fp.x, fp.z, dt, 2.4); still = false; }
+    facePerson(p, fp.x - pos.x, fp.z - pos.z, dt);
+    if (fd < 1.5 && m.atkCD <= 0 && p.attack < 0) { p.attack = 0; m.atkCD = rand(1.4, 2.0); m.victim = foe; }
+    if (p.attack > 0.62 && m.victim) {
+      _a.set(pos.x, 1.3, pos.z); e.root.localToWorld(_a);
+      if (Math.random() < 0.35) { G.events.emit('bladeContact', { pos: _a }); G.events.emit('boarderStruck', { pos: _a }); G.enemies.hitCrew(e, m.victim, 1, fp.x - pos.x, fp.z - pos.z); }
+      else G.events.emit('parried', { pos: _a });
+      m.victim = null;
+    }
+    return still;
+  }
+
+  // Leap from wherever this sailor stands to (x, z) on `ship`'s deck. `teleport` skips the arc
+  // (the ship under him is sinking or the lines are gone).
+  jump(m, ship, x, z, teleport = false) {
+    const g = m.p.g;
+    g.getWorldPosition(_a);
+    ship.root.attach(g); g.rotation.x = 0; g.rotation.z = 0;
+    const from = g.position.clone(), to = new THREE.Vector3(x, 0, clamp(z, -7, 5));
+    if (teleport) { g.position.copy(to); m.away = null; m.p.sword.visible = false; return; }
+    m.away = { ship, state: 'jump', t: 0, from, to };
+  }
+
   // Each job returns true when standing still (at work), false while walking.
-  // A gunner fires now and then, rams and sponges cannons that are reloading, otherwise
-  // walks between the guns on their side keeping watch over the rail.
+  // A gunner takes hold of a loaded gun, lays it on the enemy, and fires it; rams and sponges
+  // guns that are reloading; otherwise walks between the guns keeping watch over the rail.
   gunner(m, dt) {
     const G = this.G, S = G.ship, p = m.p, pos = p.g.position;
-    if (S.alive && m.fireCD <= 0) {
-      let best = null, bd = 1e9;
-      for (const c of S.cannons) {
-        if (c.side !== m.side || !c.inArc || !c.targetHostile || !S.cannonReady(c)) continue;
-        const d = Math.abs(c.z - pos.z);
-        if (d < bd) { bd = d; best = c; }
-      }
-      if (best) {
-        if (this.walk(m, m.side * 1.25, best.z + 0.35, dt)) {
-          facePerson(p, m.side, 0, dt);
-          if (S.lightCannon(best, 0.5)) { p.attack = 0.3; m.fireCD = 40; G.events.emit('fuseLit', { ship: S, cannon: best, pos: best.breech.getWorldPosition(_a) }); }
-          return true;
+    if (S.alive && (m.fireCD <= 0 || m.cannon)) {
+      let best = m.cannon && S.cannonReady(m.cannon) && m.cannon.inArc && m.cannon.targetHostile ? m.cannon : null;
+      if (!best) {
+        let bd = 1e9;
+        for (const c of S.cannons) {
+          // My own side first, but cross the deck if only the other side's guns bear
+          if (!c.inArc || !c.targetHostile || !S.cannonReady(c)) continue;
+          if (this.members.some((o) => o !== m && o.cannon === c)) continue;
+          const d = Math.abs(c.z - pos.z) + (c.side === m.side ? 0 : 4);
+          if (d < bd) { bd = d; best = c; }
         }
-        return false;
+      }
+      m.cannon = best;
+      if (best) {
+        if (!this.walk(m, best.side * 1.3, best.z + 0.1, dt)) { m.aimT = 0; return false; }
+        // Hands on the breech, laying the gun... then touch off the fuse
+        facePerson(p, best.side, 0, dt, 6);
+        m.aimT += dt;
+        p.pose = 'aim';
+        if (m.aimT > 1.4 && S.lightCannon(best, 0.45)) {
+          p.attack = 0.3; m.fireCD = rand(14, 20); m.cannon = null; m.aimT = 0;
+          G.events.emit('fuseLit', { ship: S, cannon: best, pos: best.breech.getWorldPosition(_a) });
+        }
+        return true;
       }
     }
+    m.aimT = 0;
     // Reload duty: the gun on my side that has been reloading longest
     let rel = null;
     for (const c of S.cannons) if (c.side === m.side && c.reload > 0.6 && (!rel || c.reload < rel.reload)) rel = c;
     if (rel) {
-      if (this.walk(m, m.side * 1.25, rel.z + 0.35, dt)) { facePerson(p, m.side, 0, dt, 5); p.pose = 'ram'; return true; }
+      if (this.walk(m, m.side * 1.3, rel.z + 0.1, dt)) { facePerson(p, m.side, 0, dt, 5); p.pose = 'ram'; return true; }
       return false;
     }
     // Watch duty: stroll between my guns and look out over the rail
@@ -191,17 +292,38 @@ export class Crew {
     return false;
   }
 
-  // The lookout paces the bow and points out enemy ships.
-  lookout(m, dt, t) {
-    const G = this.G, S = G.ship, p = m.p, pos = p.g.position;
-    m.spotT -= dt;
-    if (!m.spot || m.spotT <= 0) { m.spot = BOW_SPOTS[Math.floor(Math.random() * BOW_SPOTS.length)]; m.spotT = rand(6, 11); }
-    if (!this.walk(m, m.spot[0], m.spot[1], dt, 1.2)) return false;
+  // Finn mans the grapple gun on the bow whenever the captain isn't holding it. He keeps it
+  // trained on the nearest enemy, and under the order "bring us alongside" he fires it once
+  // they're in reach.
+  grappler(m, dt, t) {
+    const G = this.G, S = G.ship, gr = G.grapples, p = m.p, pos = p.g.position;
+    if (gr.heldBy && gr.heldBy !== m.id) {
+      // The captain has the gun: stand aside and point out the enemy
+      if (!this.walk(m, 1.2, -6.9, dt, 1.6)) return false;
+      const e = this.nearestEnemy();
+      if (e) { _a.copy(e.root.position); S.root.worldToLocal(_a); facePerson(p, _a.x - pos.x, _a.z - pos.z, dt, 2); p.pose = 'point'; }
+      return true;
+    }
+    if (!this.walk(m, GUN.x, GUN.z + 0.75, dt, 1.8)) { if (gr.heldBy === m.id) gr.heldBy = null; return false; }
+    gr.heldBy = m.id;
+    facePerson(p, -Math.sin(gr.aimYaw), -Math.cos(gr.aimYaw), dt, 4);
+    p.pose = 'aim';
     const e = this.nearestEnemy();
-    if (e) {
-      _a.copy(e.root.position); S.root.worldToLocal(_a); facePerson(p, _a.x - pos.x, _a.z - pos.z, dt, 2);
-      if ((t + m.p.phase) % 7 < 2.2) p.pose = 'point';
-    } else facePerson(p, Math.sin(t * 0.2) * 0.6, -1, dt, 1);
+    if (!e || gr.anyLineOut()) return true;
+    // Lead the target a little and lay the gun on the middle of her deck
+    gr.muzzle.getWorldPosition(_b);
+    _a.copy(e.root.position).addScaledVector(e.vel, _b.distanceTo(e.root.position) / 38); _a.y += 0.8;
+    _a.sub(_b);
+    const dist = _a.length();
+    S.root.getWorldQuaternion(_q).invert(); _a.applyQuaternion(_q).normalize();
+    const yaw = Math.atan2(-_a.x, -_a.z), pitch = Math.asin(clamp(_a.y, -1, 1)) + dist * 0.004;
+    // (the gun can't turn all the way round, so swing the short way within its limits)
+    const want = clamp(yaw, -2.3, 2.3);
+    gr.setAim(gr.aimYaw + clamp(want - gr.aimYaw, -1.5 * dt, 1.5 * dt), gr.aimPitch + clamp(pitch - gr.aimPitch, -dt, dt));
+    if (this.order === 'alongside' && e.hostile && dist < 32 && Math.abs(yaw - gr.aimYaw) < 0.05) {
+      m.aimT += dt;
+      if (m.aimT > 0.8) { m.aimT = 0; p.attack = 0.3; gr.fire(gr.gunDir(_a)); }
+    } else m.aimT = 0;
     return true;
   }
 

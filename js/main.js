@@ -113,7 +113,7 @@ function begin(vr) {
     G.hud.msg('Reach a hand near something: it glows if you can use it', 5);
     G.hud.msg('Cannons: hand on the back end, pull TRIGGER', 5);
     G.hud.msg('Walk away from the wheel and Hawkins will steer', 4.5);
-    G.hud.msg('Press A or X to give him orders', 4);
+    G.hud.msg('His orders are on your left wrist: A or X changes them', 4.5);
     G.hud.msg('Grapple gun on the bow: hook a ship and board her', 4.5);
   } else { G.hud.msg('Take the wheel, Captain!', 4); G.hud.msg('Grip the lever to set the sails', 3.5); }
 }

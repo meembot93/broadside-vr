@@ -195,7 +195,7 @@ export class Enemies {
       if (!e.alive) { animatePerson(p, dt, false, t + k); continue; }
       // Someone of ours is aboard: drop everything and fight (the helmsman only if they come close)
       const foe = this.intruderFor(e, pos);
-      if (foe && (m.role !== 'helm' || foe.d < 2.5)) { this.fightIntruder(e, m, foe.pl, dt, t + k); continue; }
+      if (foe && (m.role !== 'helm' || foe.d < 2.5)) { this.fightIntruder(e, m, foe, dt, t + k); continue; }
       if (m.role === 'helm') {
         if (this.walk(m, HELM_SPOT.x, HELM_SPOT.z, dt)) { facePerson(p, 0, -1, dt, 4); p.pose = 'steer'; } else moving = true;
       } else if (m.role === 'gunner') {
@@ -230,18 +230,25 @@ export class Enemies {
   }
 
   // The nearest living player standing on this enemy ship.
+  // (players first: our boarding party only draws them off when they're much closer)
   intruderFor(e, pos) {
     let best = null;
     for (const pl of this.G.players) {
       if (pl.dead || pl.ship !== e) continue;
       const d = Math.hypot(pl.headLocal.x - pos.x, pl.headLocal.z - pos.z);
-      if (!best || d < best.d) best = { pl, d };
+      if (!best || d < best.d) best = { pl, pos: pl.headLocal, d };
+    }
+    for (const m of this.G.crew.members) {
+      if (m.away?.ship !== e || m.away.state !== 'fight') continue;
+      const mp = m.p.g.position, d = Math.hypot(mp.x - pos.x, mp.z - pos.z);
+      if (!best || d < best.d - 1.5) best = { pl: null, pos: mp, d };
     }
     return best;
   }
 
-  fightIntruder(e, m, pl, dt, t) {
-    const p = m.p, pos = p.g.position, head = pl.headLocal;
+  // foe: { pl, pos } a player, or one of our boarding party (pl null: they parry, no harm done)
+  fightIntruder(e, m, foe, dt, t) {
+    const p = m.p, pos = p.g.position, head = foe.pos, pl = foe.pl;
     const dx = head.x - pos.x, dz = head.z - pos.z, d = Math.hypot(dx, dz);
     facePerson(p, dx, dz, dt);
     // Two at a time; the rest circle just out of reach waiting their turn
@@ -258,7 +265,7 @@ export class Enemies {
     if (p.attack > 0.62 && !m.swingHit) {
       m.swingHit = true;
       _a.set(pos.x, 1.3, pos.z); e.root.localToWorld(_a); this.G.events.emit('boarderSwing', { pos: _a });
-      if (d < 1.7) this.G.hurtPlayer(pl, 7);
+      if (d < 1.7 && pl) this.G.hurtPlayer(pl, 7);
     }
     animatePerson(p, dt, moving, t);
   }

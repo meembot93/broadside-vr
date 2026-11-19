@@ -10,7 +10,7 @@ import { halfWidth } from './ship.js';
 // View part: the gun model, the ropes and the hook. Sounds/messages come from events
 // (see presentation.js).
 
-export const GUN = { x: 0, y: 1.12, z: -8.25 };   // swivel point on our foredeck (ship-local)
+export const GUN = { x: 0, y: 1.58, z: -8.25 };   // swivel point on our foredeck (ship-local), about chest height
 export const GRAPPLE_RANGE = 42;                  // rope length, metres
 const HOOK_SPEED = 38, GAP = 7.4;                 // GAP: centre-to-centre distance when lashed alongside
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _q = new THREE.Quaternion();
@@ -37,9 +37,15 @@ export class Grapples {
     this.locks = [];       // { e, by: 'us' | 'them', phase: 'pull' | 'locked', side, zOff, hookLocal, rope, cutT }
     this.hook = null;      // our hook in flight: { pos, vel, from }
     this.aimYaw = 0; this.aimPitch = 0.12; // where the gun points (set by whoever holds it)
+    this.heldBy = null;    // id of the player or crewman on the gun
+    this.aimShown = false; // draw the aiming line this frame (the local player is holding it)
     this.buildGun();
     this.flyRope = this.makeRope();
     this.flyHook = buildHook(); this.flyHook.visible = false; G.scene.add(this.flyHook);
+    // Aiming line: shows where the hook will fly (green when it's on a ship in reach)
+    this.aimLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]),
+      new THREE.LineBasicMaterial({ color: 0xffd25a, transparent: true, opacity: 0.7, depthWrite: false }));
+    this.aimLine.frustumCulled = false; this.aimLine.visible = false; G.scene.add(this.aimLine);
   }
 
   // ---------- Model ----------
@@ -131,7 +137,7 @@ export class Grapples {
     this.G.events.emit('grappleReleased', { ship: l.e, why });
   }
 
-  clearAll() { for (const l of [...this.locks]) this.release(l, 'reset'); this.hook = null; }
+  clearAll() { for (const l of [...this.locks]) this.release(l, 'reset'); this.hook = null; this.heldBy = null; }
 
   // Where a lashed ship should sit: beside us, same heading.
   slot(l, out) {
@@ -161,6 +167,7 @@ export class Grapples {
       }
     }
 
+    this.updateKegs(dt);
     // Lashed ships
     for (const l of [...this.locks]) {
       const e = l.e;
@@ -184,11 +191,11 @@ export class Grapples {
         e.pos.x = _a.x; e.pos.z = _a.z; e.heading = S.heading; e.speed = S.speed; e.rudder = 0; e.pinned = true;
         S.speed *= 1 - 0.15 * dt;
       }
-      // A prize nobody is aboard any more gets cut loose and scuttled
-      if (e.captured && !this.playersAboard(e)) {
-        l.cutT = (l.cutT ?? 6) - dt;
+      // A prize nobody is aboard any more (and nobody blew up) gets cut loose and scuttled
+      if (e.captured && !this.playersAboard(e) && !(e.keg?.fuse >= 0)) {
+        l.cutT = (l.cutT ?? 20) - dt;
         if (l.cutT <= 0) { this.release(l, 'scuttled'); e.scuttle(); G.events.emit('prizeScuttled', { ship: e }); }
-      } else l.cutT = 6;
+      } else l.cutT = 20;
       // Their boarding party is spent and nobody of ours is over there: they cut and run
       if (l.by === 'them' && l.phase === 'locked' && e.hostile && e.ai.sent >= 5 && !G.enemies.boarders.some((b) => b.state !== 'dead') && !this.playersAboard(e)) {
         e.ai.canBoard = false; e.ai.mode = 'broadside'; this.release(l, 'theyCut');
@@ -204,6 +211,7 @@ export class Grapples {
       if (e.crew.every((m) => m.p.dead)) {
         e.captured = true; e.abandoned = true; e.ai.mode = 'adrift';
         e.strikeColors();
+        this.placeKeg(e);
         G.score++;
         G.ship.health = Math.min(G.ship.maxHealth, G.ship.health + 40);
         G.events.emit('prizeTaken', { ship: e, score: G.score });
@@ -211,10 +219,78 @@ export class Grapples {
     }
   }
 
+  // ---------- Powder keg ----------
+  // A taken prize has a powder keg by her main mast. Light it and get clear: she blows up.
+  placeKeg(e) {
+    const g = new THREE.Group(), k = 0.32;
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(k * 0.9, k * 0.9, 0.7, 10), new THREE.MeshLambertMaterial({ color: 0x5a3a1e }));
+    body.position.y = 0.35; g.add(body);
+    for (const y of [0.1, 0.35, 0.6]) { const r = new THREE.Mesh(new THREE.CylinderGeometry(k * 0.95, k * 0.95, 0.05, 10), IRON); r.position.y = y; g.add(r); }
+    const mark = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.2), new THREE.MeshBasicMaterial({ color: 0xc02a1a }));
+    mark.position.set(0, 0.42, k * 0.91); g.add(mark);
+    const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.25, 4), new THREE.MeshLambertMaterial({ color: 0xd8c08a }));
+    fuse.position.set(0.08, 0.8, 0); fuse.rotation.z = -0.4; g.add(fuse);
+    const tip = new THREE.Object3D(); tip.position.set(0.13, 0.9, 0); g.add(tip);
+    g.position.set(0.75, 0, -0.1);
+    e.root.add(g);
+    e.keg = { id: `${e.id}/keg`, fuse: -1, obj: g, tip, sparkT: 0 };
+  }
+
+  lightKeg(e) {
+    if (!e.keg || e.keg.fuse >= 0) return false;
+    e.keg.fuse = 8;
+    this.G.events.emit('kegLit', { ship: e, pos: e.keg.tip.getWorldPosition(new THREE.Vector3()) });
+    return true;
+  }
+
+  updateKegs(dt) {
+    const G = this.G;
+    for (const e of G.enemies.ships) {
+      const k = e.keg;
+      if (!k || k.fuse < 0) continue;
+      k.fuse -= dt; k.sparkT -= dt;
+      if (k.sparkT <= 0) { k.sparkT = 0.05; G.fx.sparks(k.tip.getWorldPosition(_a), 3, 0.15); }
+      if (k.fuse <= 0) {
+        k.fuse = -2;
+        const pos = k.obj.getWorldPosition(new THREE.Vector3()); pos.y += 0.5;
+        k.obj.visible = false;
+        for (const pl of G.players) if (pl.ship === e) { pl.returnHome(); G.hurtPlayer(pl, 45); }
+        for (const m of G.crew.members) if (m.away?.ship === e) G.crew.jump(m, G.ship, m.home.x, m.home.z, true);
+        const l = this.lockFor(e); if (l) this.release(l, 'blown');
+        e.scuttle(); e.sinkT = 3; // she goes down fast
+        G.events.emit('kegExploded', { ship: e, pos });
+      }
+    }
+  }
+
+  // Set the gun's aim (yaw/pitch in ship-local radians).
+  setAim(yaw, pitch) {
+    this.aimYaw = clamp(yaw, -2.3, 2.3); this.aimPitch = clamp(pitch, -0.35, 0.6);
+    this.yawG.rotation.y = this.aimYaw; this.pitchG.rotation.x = this.aimPitch;
+    this.yawG.updateMatrixWorld(true);
+  }
+
   // ---------- View ----------
   view(dt) {
     this.yawG.rotation.y = this.aimYaw;
     this.pitchG.rotation.x = this.aimPitch;
+    this.aimLine.visible = this.aimShown && !this.anyLineOut();
+    if (this.aimLine.visible) {
+      // Trace the hook's flight and stop the line where it would land
+      this.yawG.updateMatrixWorld(true);
+      const p = this.aimLine.geometry.attributes.position;
+      this.muzzle.getWorldPosition(_a); this.gunDir(_b).multiplyScalar(HOOK_SPEED).add(this.G.ship.vel);
+      p.setXYZ(0, _a.x, _a.y, _a.z);
+      let onShip = false; const pt = _a.clone(), v = _b.clone(), l = new THREE.Vector3();
+      for (let i = 0; i < 60; i++) {
+        v.y -= 9.81 * 0.6 * 0.03; pt.addScaledVector(v, 0.03);
+        if (pt.distanceTo(_a) > GRAPPLE_RANGE || pt.y < 0) break;
+        if (this.G.enemies.ships.some((e) => e.alive && e.containsWorld(pt, 0.5))) { onShip = true; break; }
+      }
+      p.setXYZ(1, pt.x, pt.y, pt.z); p.needsUpdate = true;
+      this.aimLine.material.color.setHex(onShip ? 0x50ff60 : 0xffd25a);
+    }
+    this.aimShown = false;
     this.loadedHook.visible = !this.hook && !this.locks.some((l) => l.by === 'us');
     if (this.hook) {
       this.muzzle.getWorldPosition(_a);
@@ -240,10 +316,7 @@ export class Grapples {
   aimAlong(dirWorld) {
     this.G.ship.root.getWorldQuaternion(_q).invert();
     _a.copy(dirWorld).applyQuaternion(_q);
-    this.aimYaw = clamp(Math.atan2(-_a.x, -_a.z), -2.3, 2.3);
-    this.aimPitch = clamp(Math.asin(clamp(_a.y, -1, 1)), -0.35, 0.6);
-    this.yawG.rotation.y = this.aimYaw; this.pitchG.rotation.x = this.aimPitch;
-    this.yawG.updateMatrixWorld(true);
+    this.setAim(Math.atan2(-_a.x, -_a.z), Math.asin(clamp(_a.y, -1, 1)));
   }
   // The gun's current firing direction (world).
   gunDir(out) {
