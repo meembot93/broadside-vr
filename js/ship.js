@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { waveHeight } from './waves.js';
 import { clamp, damp, angleWrap, canvasTex } from './util.js';
 import { woodify } from './materials.js';
+import { Kit, FLAT } from './kit.js';
 
 // Ship-local frame: deck at y=0, bow toward -Z, starboard toward +X.
 export const BOW = -10, STERN = 8;
@@ -85,6 +86,7 @@ export class Ship {
     this.scene = scene;
     this.id = o.id || 'ship:?'; // stable network id, handed out by Ids (see ids.js)
     this.isPlayer = !!o.isPlayer;
+    this.kind = o.kind || 'brigantine'; // 'sloop' | 'brigantine' | 'galleon' (looks only)
     this.root = new THREE.Group(); this.root.rotation.order = 'YXZ'; scene.add(this.root);
     this.pos = new THREE.Vector3(o.x || 0, 0, o.z || 0);
     this.heading = o.heading || 0;
@@ -205,8 +207,14 @@ export class Ship {
     }
 
     // Masts, yards, furled canvas, crow's nest, bowsprit
-    const masts = [{ z: -1, h: 15, r: 0.24, sails: [{ y: 13.4, w: 6, h: 4.4 }, { y: 8.6, w: 7.6, h: 5.7 }] },
-      { z: -6.5, h: 12.5, r: 0.21, sails: [{ y: 11.2, w: 5.2, h: 3.9 }, { y: 6.9, w: 6.6, h: 5.0 }] }];
+    // Rig by ship type (see the concept sheet): sloop = 1 mast, brigantine = 2, galleon = 3.
+    // The main mast (z -1, crow's nest, flag) is always there.
+    const MAIN = { z: -1, h: 15, r: 0.24, sails: [{ y: 13.4, w: 6, h: 4.4 }, { y: 8.6, w: 7.6, h: 5.7 }] };
+    const FORE = { z: -6.5, h: 12.5, r: 0.21, sails: [{ y: 11.2, w: 5.2, h: 3.9 }, { y: 6.9, w: 6.6, h: 5.0 }] };
+    const MIZZEN = { z: 3.3, h: 11, r: 0.19, sails: [{ y: 9.8, w: 4.4, h: 3.0 }, { y: 6.6, w: 5.4, h: 3.6 }] };
+    const masts = this.kind === 'sloop' ? [{ ...MAIN, h: 16, sails: [{ y: 14.4, w: 6.4, h: 4.6 }, { y: 9.6, w: 8.2, h: 6.4 }] }]
+      : this.kind === 'galleon' ? [MAIN, FORE, MIZZEN] : [MAIN, FORE];
+    this.mastList = masts;
     for (const m of masts) {
       add(new THREE.CylinderGeometry(m.r * 0.65, m.r, m.h, 8), wood, 0, m.h / 2 - 0.5, m.z);
       for (const s of m.sails) {
@@ -244,6 +252,8 @@ export class Ship {
         elevation: 0.06, yaw: 0, tElev: 0.06, tYaw: 0, reload: 0, fuse: -1, recoil: 0, inArc: false, sparkT: 0 });
     }
 
+    this.buildDecor(add, { dark, glow, trimMat, wallMat, enemy, cw });
+
     // Helm
     const wheelMat = new THREE.MeshLambertMaterial({ color: 0x7b5432 });
     add(new THREE.BoxGeometry(0.22, 1.25, 0.22), dark, 0, 0.62, 5.78);
@@ -278,7 +288,8 @@ export class Ship {
       const top = [0, m.h - 0.6, m.z];
       for (const s of [-1, 1]) for (const dz of [-1.2, 0, 1.2]) L(top, [s * halfWidth(m.z + dz) * 0.97, H, m.z + dz]);
     }
-    L([0, 14.4, -1], [0, 11.6, -6.5]); L([0, 11.6, -6.5], [0, 3.8, -14.2]); L([0, 14.4, -1], [0, 2.6, 7.6]);
+    if (masts.length > 1) { L([0, 14.4, -1], [0, 11.6, -6.5]); L([0, 11.6, -6.5], [0, 3.8, -14.2]); } else L([0, 15.4, -1], [0, 3.8, -14.2]);
+    if (this.kind === 'galleon') { L([0, 14.4, -1], [0, 10.4, 3.3]); L([0, 10.4, 3.3], [0, 2.6, 7.6]); } else L([0, 14.4, -1], [0, 2.6, 7.6]);
     const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lines, 3));
     const rig = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x2a2018 }));
     this.root.add(rig); this.geos.push(lg);
@@ -295,6 +306,69 @@ export class Ship {
       const mesh = new THREE.Mesh(g, mat); this.root.add(mesh); this.geos.push(g);
       list.forEach((x) => x.dispose());
     }
+  }
+
+  // Details in the style of the concept art: stern windows and carved trim, a balustrade on the
+  // stern cabin roof, gun ports painted along the hull, rope round the masts, and barrels,
+  // crates and rope coils on deck. All looks: nothing here blocks or changes the game.
+  buildDecor(add, { dark, glow, trimMat, wallMat, enemy, cw }) {
+    const gold = enemy ? 0x8a2a1e : 0xc8a040, kind = this.kind;
+    const k = new Kit();
+    // Stern: a row of glowing windows with frames, carved trim above and below
+    const nWin = kind === 'galleon' ? 5 : kind === 'sloop' ? 2 : 3, sternZ = 8.02;
+    for (let i = 0; i < nWin; i++) {
+      const x = (i - (nWin - 1) / 2) * (cw * 0.8 / nWin);
+      add(new THREE.BoxGeometry(0.42, 0.55, 0.04), glow, x, 1.3, sternZ + 0.02);
+      k.box(0.52, 0.07, 0.07, gold, [x, 1.6, sternZ + 0.04]); k.box(0.52, 0.07, 0.07, gold, [x, 1.0, sternZ + 0.04]);
+      k.box(0.06, 0.66, 0.07, gold, [x - 0.24, 1.3, sternZ + 0.04]); k.box(0.06, 0.66, 0.07, gold, [x + 0.24, 1.3, sternZ + 0.04]);
+      k.box(0.03, 0.55, 0.05, 0x3a2616, [x, 1.3, sternZ + 0.05]);
+    }
+    k.box(cw * 0.95, 0.12, 0.1, gold, [0, 2.05, sternZ + 0.04]);
+    k.box(cw * 0.9, 0.1, 0.1, gold, [0, 0.62, sternZ + 0.04]);
+    if (kind === 'galleon') { // a second row of windows and a carved crest
+      for (let i = 0; i < 4; i++) { const x = (i - 1.5) * 0.8; add(new THREE.BoxGeometry(0.34, 0.36, 0.04), glow, x, -0.45, sternZ + 0.04); k.box(0.44, 0.46, 0.05, gold, [x, -0.45, sternZ + 0.01]); }
+      k.ball(0.35, 0, gold, [0, 2.35, sternZ + 0.05], 0, [1.6, 0.8, 0.3]);
+    }
+    // Balustrade around the stern cabin roof: top rail on little turned posts
+    const roofY = 2.58, z0 = 7.32, z1 = 7.98, x0 = -cw / 2 + 0.06, x1 = cw / 2 - 0.06;
+    const post = (x, z) => { k.cyl(0.03, 0.03, 0.4, 5, 0x6a4628, [x, roofY + 0.2, z]); k.ball(0.045, 0, 0x6a4628, [x, roofY + 0.18, z]); };
+    for (let x = x0; x <= x1 + 1e-3; x += (x1 - x0) / Math.round((x1 - x0) / 0.26)) { post(x, z0); post(x, z1); }
+    for (const x of [x0, x1]) for (let z = z0; z <= z1; z += 0.22) post(x, z);
+    for (const z of [z0, z1]) k.box(x1 - x0 + 0.1, 0.07, 0.1, 0x4a2e18, [0, roofY + 0.43, z]);
+    for (const x of [x0, x1]) k.box(0.1, 0.07, z1 - z0, 0x4a2e18, [x, roofY + 0.43, (z0 + z1) / 2]);
+    // Painted gun ports along both sides of the hull (decoration: the real guns are on deck)
+    const ports = kind === 'galleon' ? [-7, -5, -3, -1, 1, 3, 5] : kind === 'brigantine' ? [-6, -4, -2, 0, 2, 4] : [-4, 0, 3];
+    for (const side of [-1, 1]) for (const z of ports) {
+      const y = -0.8, x = side * (halfWidth(z) * (1 + y * 0.11) + 0.03);
+      const lean = side * -0.11;
+      k.box(0.05, 0.42, 0.5, gold, [x, y, z], [0, 0, lean]);
+      k.box(0.06, 0.32, 0.4, 0x15100c, [x + side * 0.01, y, z], [0, 0, lean]);
+    }
+    // Rope wound round the foot of each mast, belaying pins on a rail
+    for (const m of this.mastList) {
+      for (let i = 0; i < 4; i++) k.add(new THREE.TorusGeometry(m.r + 0.05, 0.035, 4, 10), 0xb89a66, [0, 0.9 + i * 0.075, m.z], [Math.PI / 2, 0, 0]);
+      k.cyl(m.r + 0.12, m.r + 0.16, 0.2, 8, 0x4a2e18, [0, 0.1, m.z]);
+    }
+    // Deck clutter: barrels, crates, rope coils. Kept to the edges, clear of guns, paths and helm.
+    const barrel = (x, z, r = 0.3, h = 0.75) => {
+      k.cyl(r * 0.9, r * 0.9, h, 9, 0x7a5030, [x, h / 2, z]); k.cyl(r, r, h * 0.55, 9, 0x8a5a36, [x, h / 2, z]);
+      for (const y of [0.12, 0.5, 0.88]) k.cyl(r * (y === 0.5 ? 1.02 : 0.93), r * (y === 0.5 ? 1.02 : 0.93), 0.05, 9, 0x2e2a28, [x, h * y, z]);
+      k.cyl(r * 0.85, r * 0.85, 0.02, 9, 0x5a3a20, [x, h + 0.005, z]);
+    };
+    const crate = (x, z, s = 0.6, ry = 0, y0 = 0) => {
+      const r = [0, ry, 0], e = s / 2 + 0.012, c = Math.cos(ry), sn = Math.sin(ry);
+      k.box(s, s, s, 0x9a6e40, [x, y0 + s / 2, z], r);
+      // dark edge battens on all four sides and a diagonal brace on two faces
+      for (const [dx, dz] of [[e, e], [e, -e], [-e, e], [-e, -e]]) k.box(0.05, s + 0.02, 0.05, 0x6a4628, [x + dx * c + dz * sn, y0 + s / 2, z - dx * sn + dz * c], r);
+      for (const yy of [0.03, s - 0.03]) k.box(s + 0.04, 0.05, s + 0.04, 0x6a4628, [x, y0 + yy, z], r, [1, 1, 1]);
+      for (const f of [-1, 1]) k.box(0.04, s * 1.25, 0.03, 0x6a4628, [x + f * e * sn, y0 + s / 2, z + f * e * c], [0, ry, Math.PI / 4]);
+    };
+    const coil = (x, z, r = 0.32) => { for (let i = 0; i < 3; i++) k.add(new THREE.TorusGeometry(r - i * 0.07, 0.04, 4, 12), 0xb89a66, [x, 0.04 + i * 0.06, z], [Math.PI / 2, 0, 0]); };
+    barrel(2.35, -5.7); barrel(2.1, -6.35, 0.27, 0.68); crate(-2.25, -5.6, 0.62, 0.3); crate(-2.3, -5.6, 0.42, 0.9, 0.62);
+    coil(-1.7, -8.4); barrel(2.45, 2.55, 0.28, 0.7); coil(-2.3, 2.4);
+    crate(2.4, 4.25, 0.55, 0.15);
+    if (kind !== 'sloop') { barrel(-2.45, -1.9, 0.27, 0.7); coil(2.4, -1.8, 0.28); }
+    const decor = k.mesh(); decor.matrixAutoUpdate = false; this.root.add(decor); this.geos.push(decor.geometry);
   }
 
   makeSail(w, h, mat) {

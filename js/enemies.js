@@ -33,7 +33,9 @@ export class Enemies {
       if (G.world.isOpenWater(x, z, 30)) break;
     }
     const heading = Math.atan2(-(P.pos.x - x), -(P.pos.z - z));
-    const s = new Ship(G.scene, { id: G.ids.next('ship'), x, z, heading, maxSpeed: 7.6, turnRate: 0.22, health: 100, sail: 1, reloadTime: 9 });
+    // Ship type is looks only for now (sloop, brigantine or galleon from the concept sheet).
+    const kind = G.score === 0 && this.ships.length === 0 ? 'sloop' : ['sloop', 'brigantine', 'galleon'][Math.floor(Math.random() * 3)];
+    const s = new Ship(G.scene, { id: G.ids.next('ship'), kind, x, z, heading, maxSpeed: 7.6, turnRate: 0.22, health: 100, sail: 1, reloadTime: 9 });
     s.ai = { canBoard: this.ships.length === 0 && G.score === 0 ? true : Math.random() < 0.6, mode: 'approach', inRangeT: 0, boardT: 3, sent: 0 };
     s.driftRudder = rand(-0.3, 0.3);
     // Every job on an enemy ship needs a living sailor: no helmsman, no steering; no gunner
