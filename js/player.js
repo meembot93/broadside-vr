@@ -5,6 +5,7 @@ import { GRAPPLE_RANGE } from './grapple.js';
 import { ORDER_TEXT } from './crew.js';
 import { clamp, angleWrap, canvasTex } from './util.js';
 import { Kit, addCutlass, addMusket } from './kit.js';
+import { buildHammer, buildBucket, HAMMER_HOME, BUCKET_HOME, TUB, LEAK_BLOWS, MAST_BLOWS } from './damage.js';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _q = new THREE.Quaternion();
 const _seg = new THREE.Line3(), _p = new THREE.Vector3();
@@ -95,14 +96,18 @@ export class Player {
     this.vignette.renderOrder = 999; this.vignette.visible = false; G.camera.add(this.vignette);
 
     const homeQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
-    const mk = (kind, dz) => {
-      const it = kind === 'sword' ? buildSword() : buildMusket();
-      Object.assign(it, { id: G.ids.next('item'), heldBy: null, kind, home: { pos: new THREE.Vector3(RACK.x + 0.02, 1.0, RACK.z + dz), quat: homeQ.clone() }, holder: null, returning: false,
-        loaded: true, reloadT: 0, kick: 0, prevTip: new THREE.Vector3(), hasPrev: false, swooshCD: 0 });
+    const mk = (kind, dz, home) => {
+      const it = kind === 'sword' ? buildSword() : kind === 'hammer' ? buildHammer() : kind === 'bucket' ? buildBucket() : buildMusket();
+      home = home || { pos: new THREE.Vector3(RACK.x + 0.02, 1.0, RACK.z + dz), quat: homeQ.clone() };
+      Object.assign(it, { id: G.ids.next('item'), heldBy: null, kind, home, holder: null, returning: false,
+        loaded: true, reloadT: 0, kick: 0, prevTip: new THREE.Vector3(), hasPrev: false, swooshCD: 0, full: kind === 'bucket' ? false : undefined, hitCD: 0 });
       ship.root.add(it.obj); it.obj.position.copy(it.home.pos); it.obj.quaternion.copy(it.home.quat);
       return it;
     };
-    this.items = [mk('musket', -0.45), mk('musket', -0.05), mk('sword', 0.4)];
+    this.items = [mk('musket', -0.45), mk('musket', -0.05), mk('sword', 0.4),
+      // Repair tools: the hammer hangs head-up on its peg, the bucket on its hook (damage.js)
+      mk('hammer', 0, { pos: new THREE.Vector3(HAMMER_HOME.x, HAMMER_HOME.y, HAMMER_HOME.z), quat: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)) }),
+      mk('bucket', 0, { pos: new THREE.Vector3(BUCKET_HOME.x, BUCKET_HOME.y, BUCKET_HOME.z), quat: new THREE.Quaternion() })];
 
     // Sign above the rack
     const signTex = canvasTex(1024, 300, (g, w, h) => {
@@ -185,7 +190,9 @@ export class Player {
     if (best) return best;
     for (const it of this.items) {
       if (it.holder || this.deskItem === it) continue;
-      _seg.start.set(0, 0, it.kind === 'sword' ? 0.08 : 0.3); _seg.end.set(0, 0, it.kind === 'sword' ? -0.45 : -0.6);
+      if (it.kind === 'hammer') { _seg.start.set(0, 0, 0.06); _seg.end.set(0, 0, -0.32); }
+      else if (it.kind === 'bucket') { _seg.start.set(0, 0.1, -0.1); _seg.end.set(0, -0.2, -0.1); }
+      else { _seg.start.set(0, 0, it.kind === 'sword' ? 0.08 : 0.3); _seg.end.set(0, 0, it.kind === 'sword' ? -0.45 : -0.6); }
       it.obj.localToWorld(_seg.start); it.obj.localToWorld(_seg.end);
       _seg.closestPointToPoint(_a, true, _p);
       consider('item', _a.distanceTo(_p), 0.3, { it, point: _p.clone() });
@@ -233,15 +240,19 @@ export class Player {
       const best = t.it;
       if (!this.G.act({ type: 'takeItem', item: best.id })) return;
       h.held = best; best.holder = h; best.returning = false; best.hasPrev = false;
-      if (best.kind === 'sword') {
+      if (best.kind === 'sword' || best.kind === 'hammer') {
         // Held like a real sword: blade comes up out of the top of the fist
         h.grip.add(best.obj); best.obj.position.set(0, 0, 0.02); best.obj.rotation.set(SWORD_TILT, 0, 0);
+      } else if (best.kind === 'bucket') {
+        h.grip.add(best.obj); best.obj.position.set(0, 0, 0); best.obj.rotation.set(0, 0, 0);
       } else { h.ctrl.add(best.obj); best.obj.position.set(0, -0.01, 0.06); best.obj.quaternion.identity(); }
       h.glove.visible = false;
       this.haptic(h, 0.4, 40);
       if (!this.toldItem?.[best.kind]) {
         this.toldItem = { ...this.toldItem, [best.kind]: true };
         if (best.kind === 'musket') { this.G.hud.msg('Aim and pull TRIGGER to shoot', 3.5); this.G.hud.msg('Grip the barrel with your other hand to steady it', 4); }
+        else if (best.kind === 'hammer') { this.G.hud.msg('Bang it on a leak 3 times to plank it over', 4); this.G.hud.msg('A snapped mast takes 6 blows at its foot', 4); }
+        else if (best.kind === 'bucket') { this.G.hud.msg('Dip it in the water tub to fill it', 3.5); this.G.hud.msg('Then tip it over a fire to put it out', 3.5); }
         else this.G.hud.msg('Swing hard at boarders to cut them down', 4);
       }
       return;
@@ -300,17 +311,18 @@ export class Player {
   updateHover(h) {
     let t = null;
     if (!h.held && h.src && !this.dead) t = this.findTarget(h);
-    let text = '';
+    else if (h.held && h.src && !this.dead && (h.held.kind === 'hammer' || h.held.kind === 'bucket')) t = this.toolHint(h);
+    let text = t?.text || '';
     if (t) {
       if (t.kind === 'support') text = 'GRIP to steady';
-      else if (t.kind === 'item') text = t.it.kind === 'musket' ? 'GRIP to take musket' : 'GRIP to take cutlass';
+      else if (t.kind === 'item') text = { musket: 'GRIP to take musket', sword: 'GRIP to take cutlass', hammer: 'GRIP to take\nthe hammer', bucket: 'GRIP to take\nthe bucket' }[t.it.kind];
       else if (t.kind === 'wheel') text = 'GRIP to steer';
       else if (t.kind === 'lever') text = 'GRIP and push:\nmore sail';
       else if (t.kind === 'grapple') text = this.G.grapples.anyLineOut() ? 'GRIP, TRIGGER:\ncut the lines' : 'GRIP, then move\nyour hand to aim';
       else if (t.kind === 'keg') text = 'TRIGGER to light\nthe powder keg';
       else if (t.kind === 'cannon') text = this.G.ship.cannonReady(t.c) ? 'TRIGGER to fire!\nGRIP to aim it' : `Reloading... ${Math.ceil(t.c.reload)}`;
     }
-    const key = t ? t.kind + (t.it ? t.it.kind + this.items.indexOf(t.it) : '') + (t.c ? this.G.ship.cannons.indexOf(t.c) : '') : '';
+    const key = t ? t.kind + (t.it ? t.it.kind + this.items.indexOf(t.it) : '') + (t.c ? this.G.ship.cannons.indexOf(t.c) : '') + (t.id || '') : '';
     if (key && key !== h.hoverKey) this.haptic(h, 0.15, 15);
     h.hoverKey = key;
     h.mark.visible = h.label.visible = !!t;
@@ -343,6 +355,100 @@ export class Player {
     _m.lookAt(from, to, _p);      // makes -Z point from 'from' to 'to'
     _q.setFromRotationMatrix(_m);
     it.obj.quaternion.copy(_q2.invert()).multiply(_q);
+  }
+
+  // ---------- Repair tools (see damage.js) ----------
+  // A hammer or bucket in a VR hand, every frame: swing the hammer into a leak or a snapped
+  // mast to land a blow; dip the bucket in the tub to fill it, tip it over to throw the water.
+  useTool(it, dt) {
+    const G = this.G, S = G.ship, h = it.holder;
+    if (this.ship !== S) return;
+    if (it.kind === 'hammer') {
+      const head = it.obj.localToWorld(_a.set(0, 0.075, -0.31)); S.root.worldToLocal(head);
+      const speed = it.hasPrev ? head.distanceTo(it.prevTip) / Math.max(dt, 1e-3) : 0;
+      it.prevTip.copy(head); it.hasPrev = true;
+      if (it.hitCD > 0 || speed < 1.3) return;
+      const tgt = G.damage.hammerTarget(head, 0.28);
+      if (!tgt) return;
+      it.hitCD = 0.3;
+      if (G.act({ type: 'hammer', item: it.id, target: tgt.id })) this.haptic(h, 1, 60);
+      return;
+    }
+    // Bucket
+    const mouth = it.mouth.getWorldPosition(_a), up = _b.set(0, 1, 0).applyQuaternion(it.obj.getWorldQuaternion(_q));
+    const ml = S.root.worldToLocal(_c.copy(mouth));
+    if (!it.full) {
+      if (Math.hypot(ml.x - TUB.x, ml.z - TUB.z) < TUB.r + 0.08 && ml.y < TUB.h + 0.12 && G.act({ type: 'fillBucket', item: it.id, pos: mouth.clone() })) this.haptic(h, 0.5, 80);
+      return;
+    }
+    if (up.y < 0.2 && it.hitCD <= 0) {
+      // The water flies out the way the mouth faces and lands on the deck a little way off
+      S.root.getWorldQuaternion(_q).invert(); up.applyQuaternion(_q); up.y = 0;
+      if (up.lengthSq() > 1e-4) up.normalize();
+      const x = ml.x + up.x * 0.7, z = ml.z + up.z * 0.7;
+      it.hitCD = 0.5;
+      G.act({ type: 'pourBucket', item: it.id, x, z, from: mouth.clone(), to: S.root.localToWorld(new THREE.Vector3(x, 0.1, z)) });
+      this.haptic(h, 0.6, 120);
+    }
+  }
+
+  // Holding a tool: point out what it could be used on next.
+  toolHint(h) {
+    const G = this.G, S = G.ship, D = G.damage, it = h.held;
+    if (this.ship !== S) return null;
+    const hand = S.root.worldToLocal(this.handPos(h, _a));
+    let best = null, bd = 1e9;
+    const consider = (d, max, o) => { if (d < max && d < bd) { bd = d; best = o; } };
+    if (it.kind === 'hammer') {
+      for (const l of D.leaks) consider(Math.hypot(hand.x - l.x, hand.y - l.y, hand.z - l.z), 1.4, { kind: 'tool', id: l.id, local: [l.x, l.y, l.z], text: `Hammer the leak!\n${LEAK_BLOWS - l.blows} more` });
+      for (const M of D.masts) if (M.broken) {
+        const y = clamp(hand.y, 0.9, 2.3), d = Math.hypot(hand.x, hand.z - M.z);
+        const k = (M.r + 0.03) / Math.max(d, 1e-3);
+        consider(d, 1.6, { kind: 'tool', id: M.id, local: [hand.x * k, y, M.z + (hand.z - M.z) * k], text: `Hammer the splint!\n${MAST_BLOWS - M.blows} more` });
+      }
+    } else if (!it.full) {
+      consider(Math.hypot(hand.x - TUB.x, hand.z - TUB.z), 1.6, { kind: 'tool', id: 'tub', local: [TUB.x, TUB.h, TUB.z], text: 'Dip the bucket\nin the water' });
+    } else {
+      for (const f of D.fires) consider(Math.hypot(hand.x - f.x, hand.z - f.z), 3.5, { kind: 'tool', id: f.id, local: [f.x, 0.5, f.z], text: 'Tip the bucket\nover the fire' });
+    }
+    if (best) best.point = S.root.localToWorld(new THREE.Vector3(...best.local));
+    return best;
+  }
+
+  // Desktop: click with the hammer at a leak or the snapped mast you are looking at.
+  deskHammer(it) {
+    const G = this.G, S = G.ship, D = G.damage;
+    if (this.ship !== S) return;
+    const eye = S.root.worldToLocal(G.camera.getWorldPosition(_a));
+    S.root.getWorldQuaternion(_q).invert();
+    const dir = G.camera.getWorldDirection(_b).applyQuaternion(_q);
+    let best = null, bs = 0.78;
+    const consider = (o, x, y, z) => {
+      _c.set(x - eye.x, y - eye.y, z - eye.z); const d = _c.length();
+      if (d > 2.8) return; const s = _c.normalize().dot(dir);
+      if (s > bs) { bs = s; best = o; }
+    };
+    for (const l of D.leaks) consider(l, l.x, l.y, l.z);
+    for (const M of D.masts) if (M.broken) consider(M, 0, clamp(eye.y + dir.y * 1.5, 0.9, 2.3), M.z);
+    if (!best) { G.audio.thud(G.camera.getWorldPosition(_a)); if (D.anyDamage) G.hud.msg('Look at a leak or the snapped mast, up close', 1.6); return; }
+    G.act({ type: 'hammer', item: it.id, target: best.id });
+  }
+
+  // Desktop: click with the bucket. Near the tub it fills; full, it throws where you look.
+  deskBucket(it) {
+    const G = this.G, S = G.ship;
+    if (this.ship !== S) return;
+    const eye = S.root.worldToLocal(G.camera.getWorldPosition(_a));
+    if (!it.full) {
+      if (Math.hypot(eye.x - TUB.x, eye.z - TUB.z) < 2.2) G.act({ type: 'fillBucket', item: it.id, pos: S.root.localToWorld(new THREE.Vector3(TUB.x, TUB.h, TUB.z)) });
+      else G.hud.msg('Empty. Fill it at the water tub (port side, by the rack)', 2.5);
+      return;
+    }
+    S.root.getWorldQuaternion(_q).invert();
+    const dir = G.camera.getWorldDirection(_b).applyQuaternion(_q);
+    let tt = dir.y < -0.05 ? -eye.y / dir.y : 2.5; tt = Math.min(tt, 5);
+    const x = eye.x + dir.x * tt, z = eye.z + dir.z * tt;
+    G.act({ type: 'pourBucket', item: it.id, x, z, from: it.mouth.getWorldPosition(new THREE.Vector3()), to: S.root.localToWorld(new THREE.Vector3(x, 0.1, z)) });
   }
 
   // Light the keg on the prize you're standing on, then run for it.
@@ -516,6 +622,8 @@ export class Player {
       if (e.code === 'Digit1') this.equip('musket');
       if (e.code === 'Digit2') this.equip('sword');
       if (e.code === 'Digit3') this.equip(null);
+      if (e.code === 'Digit4') this.equip('hammer');
+      if (e.code === 'Digit5') this.equip('bucket');
       if (e.code === 'KeyT') this.G.act({ type: 'order' });
       if (e.code === 'KeyG') { const d = this.G.camera.getWorldDirection(new THREE.Vector3()); this.G.act({ type: 'aimGrapple', dir: d }); this.fireGrapple(null); }
       if (e.code === 'Space') { e.preventDefault(); if (!this.G.act({ type: 'broadside' })) this.G.hud.msg('No target in the cannons’ arc', 1.5); }
@@ -544,7 +652,12 @@ export class Player {
     this.deskItem = it; it.returning = false;
     this.G.camera.add(it.obj);
     if (kind === 'musket') { it.obj.position.set(0.2, -0.2, -0.28); it.obj.rotation.set(0, 0, 0); }
+    else if (kind === 'bucket') { it.obj.position.set(0.32, -0.2, -0.62); it.obj.rotation.set(0.25, 0, 0); }
     else { it.obj.position.set(0.3, -0.32, -0.4); it.obj.rotation.set(0.7, 0.35, 0); }
+    if (!this.toldItem?.['desk' + kind] && (kind === 'hammer' || kind === 'bucket')) {
+      this.toldItem = { ...this.toldItem, ['desk' + kind]: true };
+      this.G.hud.msg(kind === 'hammer' ? 'Look at a leak or a snapped mast and click to hammer it' : 'Click near the water tub to fill it, then click at a fire', 4);
+    }
   }
 
   // Words on the wrist card (VR) / desktop status line
@@ -562,6 +675,8 @@ export class Player {
     }
     if (it && it.kind === 'musket') { this.fireMusket(it, null); return; }
     if (it && it.kind === 'sword') { if (this.swing < 0) { this.swing = 0; this.swingHit = false; G.audio.swoosh(null); } return; }
+    if (it && it.kind === 'hammer') { if (this.swing < 0) { this.swing = 0; this.swingHit = false; } return; }
+    if (it && it.kind === 'bucket') { this.deskBucket(it); return; }
     G.camera.getWorldPosition(_a); G.camera.getWorldDirection(_c);
     for (const c of G.ship.cannons) {
       c.breech.getWorldPosition(_b); _b.sub(_a);
@@ -596,7 +711,8 @@ export class Player {
         this.swingHit = true;
         // Look direction in ship-local space, flattened onto the deck
         G.camera.getWorldDirection(_a); ship.root.getWorldQuaternion(_q).invert(); _a.applyQuaternion(_q); _a.y = 0; _a.normalize();
-        G.act({ type: 'deskSlash', facing: _a });
+        if (this.deskItem.kind === 'hammer') this.deskHammer(this.deskItem);
+        else G.act({ type: 'deskSlash', facing: _a });
       }
       if (this.swing >= 1) { this.swing = -1; this.deskItem.obj.rotation.set(0.7, 0.35, 0); }
     }
@@ -654,6 +770,8 @@ export class Player {
         it.obj.position.lerp(it.home.pos, k); it.obj.quaternion.slerp(it.home.quat, k);
         if (it.obj.position.distanceTo(it.home.pos) < 0.01) { it.obj.position.copy(it.home.pos); it.obj.quaternion.copy(it.home.quat); it.returning = false; }
       }
+      if (it.kind === 'bucket') it.water.visible = !!it.full;
+      if (it.kind === 'hammer' || it.kind === 'bucket') { it.hitCD = Math.max(0, it.hitCD - dt); if (it.holder) this.useTool(it, dt); }
       // Sword in a VR hand: check the blade against boarders
       if (it.kind === 'sword' && it.holder) {
         it.swooshCD -= dt;
@@ -663,7 +781,7 @@ export class Player {
         if (speed > 5.5 && it.swooshCD <= 0) { it.swooshCD = 0.35; it.obj.localToWorld(_c.set(0, 0, -0.6)); G.audio.swoosh(_c); }
         if (G.act({ type: 'swordSweep', item: it.id, hilt, tip, speed })) this.haptic(it.holder, 1, 70);
         it.prevTip.copy(tip); it.hasPrev = true;
-      } else it.hasPrev = false;
+      } else if (it.kind !== 'hammer' || !it.holder) it.hasPrev = false;
     }
   }
 }

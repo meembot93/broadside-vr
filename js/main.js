@@ -9,6 +9,7 @@ import { Voyages } from './voyages.js';
 import { Player } from './player.js';
 import { Crew } from './crew.js';
 import { Grapples } from './grapple.js';
+import { Damage } from './damage.js';
 import { Hud } from './hud.js';
 import { rand } from './util.js';
 import { Events } from './events.js';
@@ -56,6 +57,7 @@ G.players = [G.player];             // everyone on board; friends get added here
 G.items = G.player.items;           // muskets and cutlass on the rack (shared by the crew of players)
 G.crew = new Crew(G);
 G.grapples = new Grapples(G);
+G.damage = new Damage(G);         // leaks, fires and snapped masts you fix by hand
 G.hud = new Hud(G);
 G.player.setupVR(renderer);
 
@@ -89,7 +91,7 @@ G.byId = (id) => {
     if (s.id === id) return s;
     for (const c of s.cannons) if (c.id === id) return c;
   }
-  return G.items.find((x) => x.id === id) || G.playerById(id) || G.enemies.boarders.find((b) => b.id === id) || null;
+  return G.items.find((x) => x.id === id) || G.playerById(id) || G.enemies.boarders.find((b) => b.id === id) || G.damage.byId(id) || null;
 };
 G.playerById = (id) => G.players.find((p) => p.id === id) || null;
 // Everything a player does goes through here (see actions.js).
@@ -103,11 +105,13 @@ wirePresentation(G);
 wireVoices(G);
 // Rules that react to events:
 G.events.on('playerDied', () => { G.state = 'dead'; G.stateT = 3; });
+G.events.on('shipRefitted', () => G.damage.reset()); // fresh planks and masts between voyages
 
 function resetGame() {
   const S = G.ship;
   G.grapples.clearAll();
   G.enemies.clearAll();
+  G.damage.reset();
   S.health = S.maxHealth; S.alive = true; S.sinkT = 0; S.speed = 0;
   S.wheelAngle = 0; S.leverAngle = 0.6 - 1.2 * 0.35;
   S.helmBy = G.player.id; S.holdHeading = S.heading;
@@ -244,6 +248,7 @@ function simulate(dt) {
     aimPlayerCannons();
     G.crew.update(dt, t);
     G.combat.update(dt, t);
+    G.damage.step(dt);
     landCollisions(dt);
 
     if (G.state === 'play' && !S.alive) {
@@ -259,7 +264,6 @@ function simulate(dt) {
       }
       if (G.state === 'sinking' && G.stateT <= 0) resetGame();
     }
-    if (S.alive && !G.enemies.ships.some((e) => e.alive && e.pos.distanceTo(S.pos) < 200)) S.health = Math.min(S.maxHealth, S.health + dt * 0.8);
   } else {
     G.crew.update(dt, t);
   }
@@ -273,6 +277,7 @@ function simulate(dt) {
   if (creakT <= 0) { creakT = rand(4, 9); _a.set(rand(-2, 2), 1, rand(-6, 6)); S.root.localToWorld(_a); G.audio.creak(_a); }
 
   G.grapples.view(dt);
+  G.damage.view(dt);
   camera.getWorldPosition(_a);
   G.weather.update(dt, t, _a);
   G.world.update(t, S.pos, _a);

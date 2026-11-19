@@ -107,6 +107,30 @@ export function applyAction(G, a) {
     case 'fireGrapple':
       if (G.grapples.anyLineOut()) return G.grapples.cut() ? 'cut' : 'busy';
       return G.grapples.fire(a.dir) ? 'fired' : 'busy';
+    // ---- Repairs (see damage.js) ----
+    // A hammer blow landed on a leak or a snapped mast (target: its id).
+    case 'hammer': {
+      const it = G.byId(a.item);
+      if (!it || it.kind !== 'hammer' || it.heldBy !== player.id || player.ship !== S) return false;
+      return G.damage.hammer(player, a.target);
+    }
+    // Dip the bucket in the water tub.
+    case 'fillBucket': {
+      const it = G.byId(a.item);
+      if (!it || it.kind !== 'bucket' || it.heldBy !== player.id || it.full) return false;
+      it.full = true;
+      G.events.emit('bucketFilled', { item: it, pos: a.pos });
+      return true;
+    }
+    // Tip the bucket out. at: where the water lands (ship-local x, z). Returns fires reached.
+    case 'pourBucket': {
+      const it = G.byId(a.item);
+      if (!it || it.kind !== 'bucket' || it.heldBy !== player.id || !it.full) return false;
+      it.full = false;
+      const n = player.ship === S ? G.damage.douse(a.x, a.z) : 0;
+      G.events.emit('bucketPoured', { item: it, from: a.from, to: a.to, fires: n, player });
+      return n || true;
+    }
     // Give the helmsman the next order (or a specific one).
     case 'order': {
       const o = a.order || ORDERS[(ORDERS.indexOf(G.crew.order) + 1) % ORDERS.length];

@@ -152,6 +152,9 @@ export class Hud {
     g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(170, 186, 300, 24); g.strokeRect(170, 186, 300, 24);
     g.fillStyle = '#3a2210'; g.fillRect(318, 182, 4, 32);
     g.fillStyle = '#8a3a10'; g.fillRect(316 + S.rudder * 146, 184, 8, 28);
+    // Damage that needs fixing (damage.js)
+    const dmg = this.damageText();
+    if (dmg) { g.font = 'bold 18px Georgia, serif'; g.fillStyle = '#a02a1a'; g.fillText(dmg, 20, 229); g.font = '24px Georgia, serif'; }
     g.fillStyle = '#3a2210';
     const V = G.voyages;
     g.fillText(V.n ? `Voyage ${V.n}, fight ${Math.max(1, V.wave)} of ${V.waves.length}` : `Ships sunk: ${G.score}`, 20, 250);
@@ -199,11 +202,19 @@ export class Hud {
     }
   }
 
+  damageText() {
+    const D = this.G.damage, parts = [];
+    if (D.leaks.length) parts.push(`${D.leaks.length} leak${D.leaks.length > 1 ? 's' : ''}`);
+    if (D.fires.length) parts.push(`${D.fires.length} fire${D.fires.length > 1 ? 's' : ''}`);
+    for (const M of D.masts) if (M.broken) parts.push(`${M.name} down`);
+    return parts.length ? 'Damage: ' + parts.join(', ') : '';
+  }
+
   updateDom() {
     const G = this.G;
     if (G.mode !== 'desktop') return;
     const held = G.player.deskItem ? G.player.deskItem.kind : 'empty hands';
     const V = G.voyages, vtxt = V.n ? `Voyage ${V.n} fight ${Math.max(1, V.wave)}/${V.waves.length}` : `Sunk ${G.score}`;
-    this.dom.innerHTML = `Health ${Math.round(G.player.health)} &nbsp;|&nbsp; Hull ${Math.round(G.ship.health)} &nbsp;|&nbsp; ${vtxt} &nbsp;|&nbsp; Holding: ${held}`;
+    this.dom.innerHTML = `Health ${Math.round(G.player.health)} &nbsp;|&nbsp; Hull ${Math.round(G.ship.health)} &nbsp;|&nbsp; ${vtxt} &nbsp;|&nbsp; Holding: ${held}${this.damageText() ? ' &nbsp;|&nbsp; ' + this.damageText() : ''}`;
   }
 }
