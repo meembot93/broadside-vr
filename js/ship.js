@@ -32,6 +32,27 @@ export const HELM_COVER = { x: 1.0, z0: 4.95, z1: 6.9, top: 1.58 };
 export const HELM_SPOT = { x: 0, z: 6.3 };
 // Our ship's masts can snap here (ship-local height): everything above leans over as one piece.
 export const MAST_BREAK_Y = 2.3;
+// Height of the bulwark rail along the ship: 0.95 m amidships (where the guns are), sweeping
+// up toward the bow and the stern like the model sheet's sheer line.
+const smooth = (a, b, z) => { const t = clamp((z - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+export const railHeight = (z) => 0.95 + 0.32 * smooth(-6.8, -10, z) + 0.45 * smooth(4.6, 7.3, z);
+// How deep the hull goes at z (shallower at the bow and stern, so the bottom curves up)
+const hullDepth = (z) => 1 - 0.38 * smooth(-5.5, -10, z) - 0.12 * smooth(4, 8, z);
+// Cross-section of the hull's outside, [extra width, height] from the rail down to the keel.
+// Widest a little below the deck and narrower at the rail (tumblehome).
+// Each point is [a, b, y]: x = halfWidth * a + b at height y (negative heights scale with hullDepth).
+const SECTION = [[1, 0.07, 'rail'], [1, 0.08, 0], [1.045, 0.1, -0.6], [1.025, 0.07, -1.15], [0.94, 0.03, -1.55], [0.76, 0.01, -2.0], [0.45, 0, -2.4], [0.05, 0.07, -2.62]];
+const WATERLINE_I = 3; // section points down to this index are topsides, below is the dark bottom
+const secY = (p, z) => (p[2] === 'rail' ? railHeight(z) : p[2] * (p[2] < 0 ? hullDepth(z) : 1));
+// Outside of the hull at height y (y between the deck and the bottom), for placing things on it
+export function hullX(z, y) {
+  const w = halfWidth(clamp(z, BOW, STERN));
+  for (let i = 1; i < SECTION.length; i++) {
+    const p0 = SECTION[i - 1], p1 = SECTION[i], y0 = secY(p0, z), y1 = secY(p1, z);
+    if (y <= y0 && y >= y1) { const t = (y - y0) / (y1 - y0 || 1); return w * (p0[0] + (p1[0] - p0[0]) * t) + p0[1] + (p1[1] - p0[1]) * t; }
+  }
+  return w + 0.08;
+}
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
 const _s = new THREE.Vector3(), _m = new THREE.Matrix4();
@@ -137,18 +158,7 @@ export class Ship {
     for (let i = 0; i <= N; i++) { const z = STERN - (i * (STERN - BOW)) / N; outline.push([halfWidth(z), z]); }
     for (let i = N - 1; i >= 0; i--) { const z = STERN - (i * (STERN - BOW)) / N; outline.push([-halfWidth(z), z]); }
 
-    const extrudeHull = (scale, depth, top) => {
-      const shape = new THREE.Shape(outline.map(([x, z]) => new THREE.Vector2(x * scale, z * (1 + (scale - 1) * 0.3))));
-      const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, steps: 1, curveSegments: 1 });
-      g.rotateX(Math.PI / 2); g.translate(0, top, 0);
-      const p = g.attributes.position;
-      for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (y < 0) p.setX(i, p.getX(i) * (1 + y * 0.11)); }
-      g.computeVertexNormals();
-      return g;
-    };
-    add(extrudeHull(1, 2.6, 0), hullMat);
-    add(extrudeHull(1.018, 0.22, -0.28), trimMat);
-    add(extrudeHull(1.012, 0.12, -1.1), trimMat);
+    this.buildHull(add, { hullMat, trimMat, dark, enemy });
 
     // Deck
     const deckShape = new THREE.Shape(outline.map(([x, z]) => new THREE.Vector2(x * 0.985, -z * 0.995)));
@@ -156,7 +166,7 @@ export class Ship {
     add(deckGeo, deckMat, 0, 0.02, 0);
 
     // Bulwark wall and rail, with a low gun port cut in the wall at each cannon
-    const H = 0.95;
+    const H = 0.95, RH = railHeight;
     const isPort = (x, z) => Math.abs(x) > 1.5 && this.gunZ.some((cz) => Math.abs(z - cz) < PORT_HALF);
     const coarse = outline.map(([x, z]) => [x * 0.99, z * 0.996]);
     const loop = [];
@@ -166,11 +176,12 @@ export class Ship {
       for (let j = 0; j < k; j++) loop.push([x1 + ((x2 - x1) * j) / k, z1 + ((z2 - z1) * j) / k]);
     }
     // Height of each wall segment (segment i runs from loop[i] to loop[i+1])
-    const segH = loop.map(([x1, z1], i) => { const [x2, z2] = loop[(i + 1) % loop.length]; return isPort((x1 + x2) / 2, (z1 + z2) / 2) ? PORT_SILL : H; });
+    const segH = loop.map(([x1, z1], i) => { const [x2, z2] = loop[(i + 1) % loop.length]; return isPort((x1 + x2) / 2, (z1 + z2) / 2) ? PORT_SILL : -1; });
     const wallPos = [];
     for (let i = 0; i < loop.length; i++) {
-      const [x1, z1] = loop[i], [x2, z2] = loop[(i + 1) % loop.length], h = segH[i];
-      wallPos.push(x1, 0, z1, x2, 0, z2, x2, h, z2, x1, 0, z1, x2, h, z2, x1, h, z1);
+      const [x1, z1] = loop[i], [x2, z2] = loop[(i + 1) % loop.length];
+      const h1 = segH[i] > 0 ? segH[i] : RH(z1), h2 = segH[i] > 0 ? segH[i] : RH(z2);
+      wallPos.push(x1, 0, z1, x2, 0, z2, x2, h2, z2, x1, 0, z1, x2, h2, z2, x1, h1, z1);
     }
     const wallGeo = new THREE.BufferGeometry(); wallGeo.setAttribute('position', new THREE.Float32BufferAttribute(wallPos, 3));
     wallGeo.computeVertexNormals(); add(wallGeo, wallMat);
@@ -178,24 +189,27 @@ export class Ship {
     const n = loop.length;
     let s0 = 0; for (let i = 0; i < n; i++) if (segH[i] !== segH[(i - 1 + n) % n]) { s0 = i; break; }
     for (let i = 0; i < n;) {
-      const h = segH[(s0 + i) % n], pts = [];
-      while (i < n && segH[(s0 + i) % n] === h) { const [x, z] = loop[(s0 + i) % n]; pts.push(new THREE.Vector3(x, h + 0.03, z)); i++; }
-      const [xe, ze] = loop[(s0 + i) % n]; pts.push(new THREE.Vector3(xe, h + 0.03, ze));
+      const h = segH[(s0 + i) % n], pts = [], yAt = (z) => (h > 0 ? h : RH(z)) + 0.03;
+      while (i < n && segH[(s0 + i) % n] === h) { const [x, z] = loop[(s0 + i) % n]; pts.push(new THREE.Vector3(x, yAt(z), z)); i++; }
+      const [xe, ze] = loop[(s0 + i) % n]; pts.push(new THREE.Vector3(xe, yAt(ze), ze));
       const closed = pts.length > n;
       if (closed) pts.pop();
-      add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, closed), Math.max(2, pts.length * 2), h === H ? 0.07 : 0.06, 5, closed), dark);
+      add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, closed), Math.max(2, pts.length * 2), h < 0 ? 0.075 : 0.06, 5, closed), dark);
       // Posts framing the gun port
-      if (h !== H) for (const pt of [pts[0], pts[pts.length - 1]]) add(new THREE.BoxGeometry(0.14, H - h + 0.1, 0.14), dark, pt.x, (H + h) / 2, pt.z);
+      if (h > 0) for (const pt of [pts[0], pts[pts.length - 1]]) add(new THREE.BoxGeometry(0.14, RH(pt.z) - h + 0.1, 0.14), dark, pt.x, (RH(pt.z) + h) / 2, pt.z);
     }
 
-    // Stern cabin
-    const cw = halfWidth(7.65) * 2 * 0.99;
-    add(new THREE.BoxGeometry(cw, 2.5, 0.7), wallMat, 0, 1.25, 7.65);
-    add(new THREE.BoxGeometry(cw + 0.1, 0.12, 0.8), dark, 0, 2.52, 7.65);
-    add(new THREE.BoxGeometry(0.9, 1.9, 0.06), dark, 0, 0.95, 7.29);
-    for (const x of [-1.7, 1.7]) add(new THREE.BoxGeometry(0.6, 0.55, 0.05), glow, x, 1.55, 7.29);
-    for (const x of [-cw / 2 + 0.1, cw / 2 - 0.1]) add(new THREE.BoxGeometry(0.18, 0.28, 0.18), glow, x, 2.75, 7.4);
-    this.covers.push({ min: new THREE.Vector3(-cw / 2, 0, 7.3), max: new THREE.Vector3(cw / 2, 2.5, 8.0) });
+    // Raised quarterdeck over the stern cabin (the sheet's poop deck), overhanging the transom.
+    // The cabin front has a door and windows; stairs climb up both sides; a balustrade runs
+    // along the front edge. Looks only: you can't walk up there.
+    const cw = halfWidth(7.3) * 2 * 0.99, QD = 1.55, QZ0 = 7.3, QZ1 = 9.3;
+    this.quarter = { cw, QD, QZ0, QZ1 };
+    add(new THREE.BoxGeometry(cw, QD, QZ1 - QZ0), wallMat, 0, QD / 2, (QZ0 + QZ1) / 2);           // cabin block
+    add(new THREE.BoxGeometry(cw + 0.3, 2.15, QZ1 - 8.0), hullMat, 0, QD - 1.08, (8.0 + QZ1) / 2); // overhanging stern
+    add(new THREE.BoxGeometry(cw + 0.12, 0.1, QZ1 - QZ0 + 0.12), dark, 0, QD + 0.03, (QZ0 + QZ1) / 2);
+    add(new THREE.BoxGeometry(0.85, 1.35, 0.06), dark, 0, 0.68, QZ0 - 0.02);                       // door
+    for (const x of [-1.6, 1.6]) add(new THREE.BoxGeometry(0.5, 0.45, 0.05), glow, x, 0.95, QZ0 - 0.02);
+    this.covers.push({ min: new THREE.Vector3(-cw / 2, 0, QZ0), max: new THREE.Vector3(cw / 2, QD + 0.9, QZ1) });
 
     if (enemy) {
       // Helm shelter: thick planking around the wheel so the helmsman can't simply be picked
@@ -242,12 +256,17 @@ export class Ship {
         sm.position.set(0, s.y - 0.05, m.z - 0.38);
         if (m.group) { sm.position.y -= B; sm.position.z -= m.z; m.group.add(sm); } else this.root.add(sm);
       }
-      if (m.z === -1) { // crow's nest on the main mast
-        put(new THREE.CylinderGeometry(0.72, 0.58, 0.55, 10, 1, true), wood, 0, 10.4, -1);
-        put(new THREE.CylinderGeometry(0.72, 0.72, 0.06, 10), dark, 0, 10.15, -1);
+      if (m.z === -1 || m.z === -6.5) { // crow's nests on the main and fore masts
+        const ny = m.z === -1 ? 10.4 : 8.6, nr = m.z === -1 ? 0.72 : 0.6;
+        put(new THREE.CylinderGeometry(nr, nr * 0.8, 0.55, 10, 1, true), wood, 0, ny, m.z);
+        put(new THREE.CylinderGeometry(nr, nr, 0.06, 10), dark, 0, ny - 0.25, m.z);
       }
     }
-    add(new THREE.CylinderGeometry(0.1, 0.17, 5.2, 7), wood, 0, 1.45, -11.85, -70 * Math.PI / 180, 0, 0);
+    // Bowsprit and jib-boom, angled up over the bow
+    const BS = -72 * Math.PI / 180;
+    add(new THREE.CylinderGeometry(0.11, 0.2, 6.2, 8), wood, 0, 1.55, -12.4, BS, 0, 0);
+    add(new THREE.CylinderGeometry(0.06, 0.1, 3.4, 6), wood, 0, 3.0, -16.6, BS, 0, 0);
+    add(new THREE.CylinderGeometry(0.16, 0.16, 0.12, 8), dark, 0, 2.05, -13.9, BS, 0, 0);
 
     // Cannon carriages (barrels are separate, they move)
     // They sit on a raised gun platform so the back end is at about waist height.
@@ -305,11 +324,24 @@ export class Ship {
     const lines = [];
     const L = (a, b) => lines.push(a[0], a[1], a[2], b[0], b[1], b[2]);
     for (const m of masts) {
-      const top = [0, m.h - 0.6, m.z];
-      for (const s of [-1, 1]) for (const dz of [-1.2, 0, 1.2]) L(top, [s * halfWidth(m.z + dz) * 0.97, H, m.z + dz]);
+      // Shrouds from below the masthead down to deadeyes on the channels outside the rail,
+      // with ratlines (the rope ladder rungs) tied across them
+      const top = [0, m.h * 0.66, m.z];
+      for (const sd of [-1, 1]) {
+        const feet = [-0.9, -0.3, 0.3, 0.9].map((dz) => [sd * (halfWidth(m.z + dz) + 0.32), RH(m.z + dz) + 0.05, m.z + dz]);
+        for (const f of feet) L([sd * 0.15, top[1], m.z + (f[2] - m.z) * 0.15], f);
+        const yTop = top[1] - 0.6, y0 = RH(m.z) + 0.45;
+        for (let y = y0; y < yTop; y += 0.42) {
+          const u = (y - feet[0][1]) / (top[1] - feet[0][1]);
+          const pts = feet.map((f) => [f[0] + (sd * 0.15 - f[0]) * u, y, f[2] + (m.z + (f[2] - m.z) * 0.15 - f[2]) * u]);
+          for (let q = 0; q < pts.length - 1; q++) L(pts[q], pts[q + 1]);
+        }
+      }
+      L([0, m.h - 0.6, m.z], [0, m.h * 0.66, m.z]);
     }
-    if (masts.length > 1) { L([0, 14.4, -1], [0, 11.6, -6.5]); L([0, 11.6, -6.5], [0, 3.8, -14.2]); } else L([0, 15.4, -1], [0, 3.8, -14.2]);
-    if (this.kind === 'galleon') { L([0, 14.4, -1], [0, 10.4, 3.3]); L([0, 10.4, 3.3], [0, 2.6, 7.6]); } else L([0, 14.4, -1], [0, 2.6, 7.6]);
+    if (masts.length > 1) { L([0, 14.4, -1], [0, 11.6, -6.5]); L([0, 11.6, -6.5], [0, 4.4, -18.2]); L([0, 9.0, -6.5], [0, 2.6, -14.2]); }
+    else { L([0, 15.4, -1], [0, 4.4, -18.2]); L([0, 11, -1], [0, 2.6, -14.2]); }
+    if (this.kind === 'galleon') { L([0, 14.4, -1], [0, 10.4, 3.3]); L([0, 10.4, 3.3], [0, 2.6, 9.2]); } else L([0, 14.4, -1], [0, 2.6, 9.2]);
     const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lines, 3));
     const rig = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x2a2018 }));
     this.root.add(rig); this.geos.push(lg);
@@ -319,7 +351,7 @@ export class Ship {
       this.rigOwner = [];
       for (let i = 0; i < lines.length / 3; i++) {
         const y = lines[i * 3 + 1], z = lines[i * 3 + 2];
-        this.rigOwner.push(y > B + 0.5 ? this.mastList.find((m) => Math.abs(m.z - z) < 0.01) || null : null);
+        this.rigOwner.push(y > B + 0.5 ? this.mastList.find((m) => Math.abs(m.z - z) < 0.01) || (y > B + 1.2 ? this.mastList.find((m) => Math.abs(m.z - z) < 1.2) : null) || null : null);
       }
     }
 
@@ -339,42 +371,152 @@ export class Ship {
     }
   }
 
+  // The hull's outside: lofted through cross-sections from stern to bow, so it has a curved
+  // sheer, tumblehome, a rounded bottom that sweeps up at the bow, a keel, stem and rudder.
+  buildHull(add, { hullMat, trimMat, dark, enemy }) {
+    const low = woodify(new THREE.MeshLambertMaterial({ color: enemy ? 0x241e1a : 0x4a3020, side: THREE.DoubleSide, flatShading: true }), 0.3);
+    hullMat.side = THREE.DoubleSide; hullMat.flatShading = true;
+    const N = 44, st = [];
+    for (let i = 0; i <= N; i++) {
+      const z = STERN - (STERN - BOW) * (i / N);
+      const w = halfWidth(z);
+      st.push(SECTION.map((p) => [w * p[0] + p[1], secY(p, z), z]));
+    }
+    const strip = (j0, j1) => {
+      const pos = [];
+      for (let i = 0; i < N; i++) for (let j = j0; j < j1; j++) for (const sd of [1, -1]) {
+        const a = st[i][j], b = st[i + 1][j], c = st[i + 1][j + 1], d = st[i][j + 1];
+        const P = (q) => [sd * q[0], q[1], q[2]];
+        pos.push(...P(a), ...P(b), ...P(c), ...P(a), ...P(c), ...P(d));
+      }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+      return g;
+    };
+    add(strip(0, WATERLINE_I), hullMat);
+    add(strip(WATERLINE_I, SECTION.length - 1), low);
+    // Transom: close the flat stern
+    const sec = st[0], shape = new THREE.Shape([...sec.map((p) => new THREE.Vector2(p[0], p[1])), ...sec.slice().reverse().map((p) => new THREE.Vector2(-p[0], p[1]))]);
+    add(new THREE.ShapeGeometry(shape), hullMat, 0, 0, STERN);
+    // Keel along the bottom, the stem rising at the bow, the rudder at the stern
+    const keel = []; for (let z = STERN; z >= -9.2; z -= 0.8) keel.push(new THREE.Vector3(0, -2.62 * hullDepth(z) - 0.06, z));
+    add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(keel), 24, 0.11, 4), dark);
+    const stem = [[0, railHeight(BOW) + 0.45, BOW - 0.45], [0, 0.4, BOW - 0.2], [0, -0.6, BOW + 0.15], [0, -1.25, BOW + 0.8], [0, -1.6, BOW + 1.6]].map((p) => new THREE.Vector3(...p));
+    add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(stem), 16, 0.13, 5), dark);
+    add(new THREE.BoxGeometry(0.16, 2.4, 0.95), low, 0, -1.25, STERN + 0.5);
+    add(new THREE.BoxGeometry(0.2, 0.3, 0.3), dark, 0, 0.0, STERN + 0.18);
+    // Wales: a thick dark band below the rail and a thin painted line at the waterline
+    const band = (y, r, mat) => { for (const sd of [-1, 1]) {
+      const pts = []; for (let z = STERN - 0.02; z > BOW + 0.25; z -= 0.45) pts.push(new THREE.Vector3(sd * (hullX(z, y * (y < 0 ? hullDepth(z) : 1)) + r * 0.6), y * (y < 0 ? hullDepth(z) : 1), z));
+      add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), pts.length * 2, r, 4), mat);
+    } };
+    band(-0.32, 0.075, dark); band(-0.05, 0.035, trimMat); band(-1.12, 0.04, trimMat);
+  }
+
   // Details in the style of the concept art: stern windows and carved trim, a balustrade on the
   // stern cabin roof, gun ports painted along the hull, rope round the masts, and barrels,
   // crates and rope coils on deck. All looks: nothing here blocks or changes the game.
   buildDecor(add, { dark, glow, trimMat, wallMat, enemy, cw }) {
     const gold = enemy ? 0x8a2a1e : 0xc8a040, kind = this.kind;
     const k = new Kit();
-    // Stern: a row of glowing windows with frames, carved trim above and below
-    const nWin = kind === 'galleon' ? 5 : kind === 'sloop' ? 2 : 3, sternZ = 8.02;
+    const { QD, QZ0, QZ1 } = this.quarter, RH = railHeight;
+    const WOOD = enemy ? 0x4a3a2e : 0x7a5232, WOOD_D = enemy ? 0x2e241e : 0x4a2e18, WOOD_L = enemy ? 0x5a4838 : 0x9a6e42;
+    // Stern: arched glowing windows with gold frames, carved rails above and below, lanterns
+    const nWin = kind === 'galleon' ? 5 : kind === 'sloop' ? 2 : 3, sz = QZ1 + 0.02, sw = cw + 0.3;
     for (let i = 0; i < nWin; i++) {
-      const x = (i - (nWin - 1) / 2) * (cw * 0.8 / nWin);
-      add(new THREE.BoxGeometry(0.42, 0.55, 0.04), glow, x, 1.3, sternZ + 0.02);
-      k.box(0.52, 0.07, 0.07, gold, [x, 1.6, sternZ + 0.04]); k.box(0.52, 0.07, 0.07, gold, [x, 1.0, sternZ + 0.04]);
-      k.box(0.06, 0.66, 0.07, gold, [x - 0.24, 1.3, sternZ + 0.04]); k.box(0.06, 0.66, 0.07, gold, [x + 0.24, 1.3, sternZ + 0.04]);
-      k.box(0.03, 0.55, 0.05, 0x3a2616, [x, 1.3, sternZ + 0.05]);
+      const x = (i - (nWin - 1) / 2) * (sw * 0.78 / nWin);
+      add(new THREE.BoxGeometry(0.44, 0.48, 0.04), glow, x, 0.42, sz);
+      add(new THREE.CylinderGeometry(0.22, 0.22, 0.04, 10, 1, false, -Math.PI / 2, Math.PI), glow, x, 0.66, sz, Math.PI / 2, 0, 0);
+      k.add(new THREE.TorusGeometry(0.25, 0.04, 4, 10, Math.PI), gold, [x, 0.66, sz + 0.02]);
+      for (const dx of [-0.25, 0.25]) k.box(0.07, 0.5, 0.07, gold, [x + dx, 0.41, sz + 0.02]);
+      k.box(0.58, 0.07, 0.08, gold, [x, 0.15, sz + 0.02]);
+      k.box(0.03, 0.7, 0.05, WOOD_D, [x, 0.5, sz + 0.03]); k.box(0.44, 0.03, 0.05, WOOD_D, [x, 0.45, sz + 0.03]);
     }
-    k.box(cw * 0.95, 0.12, 0.1, gold, [0, 2.05, sternZ + 0.04]);
-    k.box(cw * 0.9, 0.1, 0.1, gold, [0, 0.62, sternZ + 0.04]);
-    if (kind === 'galleon') { // a second row of windows and a carved crest
-      for (let i = 0; i < 4; i++) { const x = (i - 1.5) * 0.8; add(new THREE.BoxGeometry(0.34, 0.36, 0.04), glow, x, -0.45, sternZ + 0.04); k.box(0.44, 0.46, 0.05, gold, [x, -0.45, sternZ + 0.01]); }
-      k.ball(0.35, 0, gold, [0, 2.35, sternZ + 0.05], 0, [1.6, 0.8, 0.3]);
+    k.box(sw, 0.1, 0.12, gold, [0, 1.25, sz + 0.02]); k.box(sw, 0.12, 0.12, gold, [0, -0.45, sz + 0.02]);
+    k.box(sw * 0.7, 0.18, 0.1, WOOD_D, [0, 1.05, sz + 0.02]);
+    if (kind === 'galleon') k.ball(0.35, 0, gold, [0, QD + 0.55, sz + 0.05], 0, [1.6, 0.8, 0.3]);
+    for (const sd of [-1, 1]) { // stern lanterns on posts
+      k.cyl(0.04, 0.04, 0.6, 5, WOOD_D, [sd * (cw / 2 - 0.05), QD + 0.3, QZ1 - 0.08]);
+      add(new THREE.BoxGeometry(0.2, 0.3, 0.2), glow, sd * (cw / 2 - 0.05), QD + 0.75, QZ1 - 0.08);
+      k.cyl(0.14, 0.04, 0.12, 6, gold, [sd * (cw / 2 - 0.05), QD + 0.96, QZ1 - 0.08]);
     }
-    // Balustrade around the stern cabin roof: top rail on little turned posts
-    const roofY = 2.58, z0 = 7.32, z1 = 7.98, x0 = -cw / 2 + 0.06, x1 = cw / 2 - 0.06;
-    const post = (x, z) => { k.cyl(0.03, 0.03, 0.4, 5, 0x6a4628, [x, roofY + 0.2, z]); k.ball(0.045, 0, 0x6a4628, [x, roofY + 0.18, z]); };
-    for (let x = x0; x <= x1 + 1e-3; x += (x1 - x0) / Math.round((x1 - x0) / 0.26)) { post(x, z0); post(x, z1); }
-    for (const x of [x0, x1]) for (let z = z0; z <= z1; z += 0.22) post(x, z);
-    for (const z of [z0, z1]) k.box(x1 - x0 + 0.1, 0.07, 0.1, 0x4a2e18, [0, roofY + 0.43, z]);
-    for (const x of [x0, x1]) k.box(0.1, 0.07, z1 - z0, 0x4a2e18, [x, roofY + 0.43, (z0 + z1) / 2]);
-    // Painted gun ports along both sides of the hull (decoration: the real guns are on deck)
+    // Balustrade round the quarterdeck: a top rail on little turned posts
+    const post = (x, y, z, h = 0.5) => { k.cyl(0.028, 0.034, h, 5, WOOD_L, [x, y + h / 2, z]); k.ball(0.048, 0, WOOD_L, [x, y + h * 0.45, z]); };
+    const run = (x0, z0, x1, z1, y, h = 0.5) => {
+      const L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(2, Math.round(L / 0.2));
+      for (let i = 0; i <= n; i++) post(x0 + (x1 - x0) * i / n, y, z0 + (z1 - z0) * i / n, h);
+      k.box(0.11, 0.07, L + 0.08, WOOD_D, [(x0 + x1) / 2, y + h + 0.02, (z0 + z1) / 2], [0, Math.atan2(x1 - x0, z1 - z0), 0]);
+    };
+    const qx = cw / 2 - 0.05, stair = 0.62;
+    run(-qx, QZ0 + 0.06, -qx + 0.05, QZ1 - 0.1, QD); run(qx, QZ0 + 0.06, qx - 0.05, QZ1 - 0.1, QD); run(-qx + 0.05, QZ1 - 0.1, qx - 0.05, QZ1 - 0.1, QD);
+    run(-qx + stair + 0.05, QZ0 + 0.06, qx - stair - 0.05, QZ0 + 0.06, QD);
+    // Stairs up both sides of the cabin front, with a hand rail
+    const steps = 5, rise = QD / steps, tread = 0.19;
+    for (const sd of [-1, 1]) {
+      const x = sd * (qx - stair / 2);
+      for (let i = 0; i < steps; i++) k.box(stair, 0.06, tread + 0.04, WOOD_L, [x, rise * (i + 1) - 0.03, QZ0 - (steps - i) * tread + tread / 2]);
+      for (const ex of [-1, 1]) k.box(0.06, 0.08, Math.hypot(steps * tread, QD) + 0.1, WOOD_D, [x + ex * stair / 2, QD / 2 - 0.02, QZ0 - steps * tread / 2], [Math.atan2(QD, steps * tread), 0, 0]);
+      const inner = x - sd * stair / 2;
+      k.box(0.06, 0.06, Math.hypot(steps * tread, QD) + 0.2, WOOD_D, [inner, QD / 2 + 0.8, QZ0 - steps * tread / 2], [Math.atan2(QD, steps * tread), 0, 0]);
+      for (let i = 0; i <= 2; i++) k.cyl(0.025, 0.025, 0.85, 5, WOOD_L, [inner, rise * steps * i / 2 + 0.42, QZ0 - steps * tread + i * steps * tread / 2]);
+    }
+    // Cabin front: door frame and planks, window frames, a lantern over the door
+    k.box(1.0, 0.1, 0.08, WOOD_D, [0, 1.4, QZ0 - 0.03]); for (const dx of [-0.47, 0.47]) k.box(0.08, 1.4, 0.08, WOOD_D, [dx, 0.7, QZ0 - 0.03]);
+    for (const dx of [-0.2, 0, 0.2]) k.box(0.02, 1.3, 0.03, 0x3a2414, [dx, 0.68, QZ0 - 0.06]);
+    k.box(0.07, 0.07, 0.04, gold, [0.28, 0.7, QZ0 - 0.07]);
+    for (const x of [-1.6, 1.6]) { k.box(0.62, 0.07, 0.07, WOOD_D, [x, 1.21, QZ0 - 0.03]); k.box(0.62, 0.07, 0.07, WOOD_D, [x, 0.69, QZ0 - 0.03]); k.box(0.04, 0.5, 0.05, WOOD_D, [x, 0.95, QZ0 - 0.05]); }
+    // Forecastle: a short raised deck in the bow, with a capstan and a little rail
+    const FZ = -8.75, FY = 0.42;
+    const fw = (z) => halfWidth(z) * 0.97;
+    const fs = new THREE.Shape(); fs.moveTo(-fw(FZ), -FZ);
+    for (let z = FZ; z >= BOW + 0.15; z -= 0.25) fs.lineTo(fw(z), -z);
+    for (let z = BOW + 0.15; z <= FZ; z += 0.25) fs.lineTo(-fw(z), -z);
+    k.add(new THREE.ExtrudeGeometry(fs, { depth: 0.1, bevelEnabled: false }).rotateX(-Math.PI / 2).translate(0, FY - 0.1, 0), WOOD_L);
+    k.box(fw(FZ) * 2, FY, 0.08, WOOD_D, [0, FY / 2, FZ]);
+    run(-fw(FZ) + 0.1, FZ + 0.02, -0.55, FZ + 0.02, FY, 0.42); run(0.55, FZ + 0.02, fw(FZ) - 0.1, FZ + 0.02, FY, 0.42);
+    k.cyl(0.26, 0.3, 0.55, 8, WOOD, [0, FY + 0.28, -9.35]); k.cyl(0.32, 0.32, 0.08, 8, WOOD_D, [0, FY + 0.56, -9.35]);
+    for (let i = 0; i < 4; i++) k.box(0.9, 0.05, 0.06, WOOD_L, [0, FY + 0.5, -9.35], [0, i * Math.PI / 4, 0]);
+    // Carved head at the bow: gold scroll rails sweeping up to the bowsprit, a scroll on the stem
+    for (const sd of [-1, 1]) {
+      k.tube([[sd * 0.9, RH(-8.8) - 0.15, -8.8], [sd * 0.55, RH(-9.6) - 0.05, -9.75], [sd * 0.16, 0.95, -10.55], [sd * 0.05, 1.35, -10.85]], 0.05, gold, 5);
+      k.tube([[sd * 1.0, 0.25, -8.9], [sd * 0.6, 0.35, -9.8], [sd * 0.15, 0.6, -10.5]], 0.04, gold, 4);
+    }
+    k.add(new THREE.TorusGeometry(0.2, 0.06, 5, 10, Math.PI * 1.5), gold, [0, RH(BOW) + 0.3, BOW - 0.42], [0, Math.PI / 2, 0]);
+    // Catheads and anchors hanging at the bow
+    for (const sd of [-1, 1]) {
+      const z = -8.1, x = sd * (halfWidth(z) + 0.05), y = RH(z) + 0.05;
+      k.box(0.75, 0.16, 0.16, WOOD_D, [x + sd * 0.3, y, z - 0.1], [0, sd * 0.3, 0]);
+      const ax = sd * (hullX(z, -0.3) + 0.12), az = z + 0.25;
+      k.box(0.08, 1.1, 0.08, 0x2a2c31, [ax, -0.25, az]);
+      k.box(0.06, 0.06, 0.7, 0x4a3020, [ax, 0.25, az]);
+      k.add(new THREE.TorusGeometry(0.32, 0.045, 4, 10, Math.PI), 0x2a2c31, [ax, -0.5, az], [0, Math.PI / 2, Math.PI]);
+      for (const dz of [-0.32, 0.32]) k.add(new THREE.ConeGeometry(0.08, 0.16, 4), 0x2a2c31, [ax, -0.5, az + dz]);
+    }
+    // Gun ports painted along both sides of the hull (the working guns are on deck)
     const ports = kind === 'galleon' ? [-7, -5, -3, -1, 1, 3, 5] : kind === 'brigantine' ? [-6, -4, -2, 0, 2, 4] : [-4, 0, 3];
     for (const side of [-1, 1]) for (const z of ports) {
-      const y = -0.8, x = side * (halfWidth(z) * (1 + y * 0.11) + 0.03);
-      const lean = side * -0.11;
-      k.box(0.05, 0.42, 0.5, gold, [x, y, z], [0, 0, lean]);
-      k.box(0.06, 0.32, 0.4, 0x15100c, [x + side * 0.01, y, z], [0, 0, lean]);
+      const y = -0.62, x = side * (hullX(z, y) + 0.015);
+      k.box(0.05, 0.4, 0.48, gold, [x, y, z]);
+      k.box(0.06, 0.3, 0.38, 0x15100c, [x + side * 0.01, y, z]);
+      k.cyl(0.07, 0.08, 0.22, 6, 0x2a2c31, [x + side * 0.08, y, z], [0, 0, Math.PI / 2]);
     }
+    // Channels and deadeyes outside the rail where the shrouds come down
+    for (const m of this.mastList) for (const sd of [-1, 1]) {
+      const x = sd * (halfWidth(m.z) + 0.2), y = RH(m.z) - 0.18;
+      k.box(0.32, 0.08, 2.3, WOOD_D, [x, y, m.z]);
+      for (const dz of [-0.9, -0.3, 0.3, 0.9]) {
+        const xx = sd * (halfWidth(m.z + dz) + 0.32);
+        k.cyl(0.07, 0.07, 0.05, 7, 0x2a1a10, [xx, RH(m.z + dz) + 0.05, m.z + dz], [0, 0, Math.PI / 2]);
+        k.box(0.03, 0.6, 0.03, 0x2a2c31, [xx, y - 0.3, m.z + dz]);
+      }
+    }
+    // Cargo hatches with gratings
+    const grating = (z, w, d) => {
+      k.box(w + 0.16, 0.08, d + 0.16, WOOD_D, [0, 0.04, z]);
+      k.box(w, 0.04, d, 0x1a120c, [0, 0.07, z]);
+      for (let x = -w / 2 + 0.07; x < w / 2; x += 0.14) k.box(0.05, 0.05, d, WOOD_L, [x, 0.095, z]);
+      for (let zz = -d / 2 + 0.07; zz < d / 2; zz += 0.14) k.box(w, 0.035, 0.05, WOOD_L, [0, 0.1, z + zz]);
+    };
+    grating(-4.5, 1.3, 1.0); if (!this.gunZ.some((gz) => Math.abs(gz - 2.6) < 0.6)) grating(2.6, 1.1, 0.9);
     // Rope wound round the foot of each mast, belaying pins on a rail
     for (const m of this.mastList) {
       for (let i = 0; i < 4; i++) k.add(new THREE.TorusGeometry(m.r + 0.05, 0.035, 4, 10), 0xb89a66, [0, 0.9 + i * 0.075, m.z], [Math.PI / 2, 0, 0]);
@@ -395,8 +537,8 @@ export class Ship {
       for (const f of [-1, 1]) k.box(0.04, s * 1.25, 0.03, 0x6a4628, [x + f * e * sn, y0 + s / 2, z + f * e * c], [0, ry, Math.PI / 4]);
     };
     const coil = (x, z, r = 0.32) => { for (let i = 0; i < 3; i++) k.add(new THREE.TorusGeometry(r - i * 0.07, 0.04, 4, 12), 0xb89a66, [x, 0.04 + i * 0.06, z], [Math.PI / 2, 0, 0]); };
-    barrel(2.35, -5.7); barrel(2.1, -6.35, 0.27, 0.68); crate(-2.25, -5.6, 0.62, 0.3); crate(-2.3, -5.6, 0.42, 0.9, 0.62);
-    coil(-1.7, -8.4); barrel(2.45, 2.55, 0.28, 0.7); coil(-2.3, 2.4);
+    barrel(2.0, -5.45); barrel(1.85, -6.1, 0.27, 0.68); crate(-1.95, -5.4, 0.62, 0.3); crate(-1.98, -5.4, 0.42, 0.9, 0.62);
+    coil(-1.1, -7.9); barrel(2.45, 2.55, 0.28, 0.7); coil(-2.3, 2.4);
     if (!this.gunZ.some((gz) => Math.abs(gz - 4.25) < 1)) crate(2.4, 4.25, 0.55, 0.15);
     if (kind !== 'sloop') { barrel(-2.45, -1.9, 0.27, 0.7); coil(2.4, -1.8, 0.28); }
     const decor = k.mesh(); decor.matrixAutoUpdate = false; this.root.add(decor); this.geos.push(decor.geometry);
