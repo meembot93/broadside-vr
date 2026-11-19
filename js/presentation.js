@@ -5,6 +5,14 @@
 import * as THREE from 'three';
 
 const _a = new THREE.Vector3();
+const A_KIND = { sloop: 'A sloop', brigantine: 'A brigantine', galleon: 'A galleon' };
+// ['sloop', 'sloop', 'brigantine'] -> 'two sloops and a brigantine'
+function listKinds(kinds) {
+  const n = {}; for (const k of kinds) n[k] = (n[k] || 0) + 1;
+  const words = ['', 'a', 'two', 'three', 'four'];
+  const parts = Object.entries(n).map(([k, c]) => `${words[c] || c} ${k}${c > 1 ? 's' : ''}`);
+  return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0];
+}
 
 export function wirePresentation(G) {
   const on = (type, fn) => G.events.on(type, fn);
@@ -52,7 +60,10 @@ export function wirePresentation(G) {
   on('boarderStruck', ({ pos }) => audio.thud(pos));
 
   // ---- Enemies ----
-  on('enemySpawned', ({ count }) => { hud.msg(count > 1 ? 'Another sail on the horizon!' : 'Enemy ship sighted!', 3.5); audio.bell(); });
+  on('enemySpawned', ({ kind, boss, count }) => {
+    if (boss) return; // bossArrived says it
+    hud.msg(count > 1 ? `Another sail! ${A_KIND[kind] || 'A ship'} joins the fight` : `${A_KIND[kind] || 'An enemy ship'} on the horizon!`, 3.5); audio.bell();
+  });
   on('enemySunk', ({ score }) => {
     hud.msg(score === 1 ? 'Enemy ship sunk! Huzzah!' : `Another one down! ${score} sunk`, 3.5);
     G.crew.cheer(); audio.cheer();
@@ -63,13 +74,60 @@ export function wirePresentation(G) {
     else hud.msg('More boarders!', 2);
   });
   on('boarderSwing', ({ pos }) => audio.swoosh(pos));
-  on('enemyCrewKilled', ({ role, left }) => {
-    if (left === 0) return;
+  on('enemyCrewKilled', ({ role, left, cause, boss }) => {
+    if (left === 0 || cause === 'surrender' || boss) return;
     if (role === 'helm') hud.msg('Their helmsman is down! She’s steering wild', 3);
     else if (left <= 2) hud.msg(`Only ${left} of their crew left standing`, 2.5);
   });
   on('enemyHelmTaken', () => hud.msg('Another of theirs is running for the wheel', 2.5));
-  on('enemyAbandoned', () => { hud.msg('Their whole crew is down! She’s drifting', 4); G.crew.cheer(); audio.cheer(); });
+  on('enemyAbandoned', ({ ship }) => {
+    if (ship.boss) return; // bossDefeated says it
+    hud.msg('Their whole crew is down! She’s drifting', 4); G.crew.cheer(); audio.cheer(); });
+
+  // ---- Voyages and bosses (voyages.js) ----
+  on('voyageStarted', ({ voyage, name, waves, boss }) => {
+    hud.msg(`Voyage ${voyage}: ${name}`, 4.5);
+    hud.msg(`${waves} fights, and then ${boss}`, 4);
+  });
+  on('waveStarted', ({ wave, waves, boss }) => { if (!boss) hud.msg(`Fight ${wave} of ${waves}`, 2.5); });
+  on('bossArrived', ({ name }) => {
+    audio.bell(); setTimeout(() => audio.bell(), 600);
+    hud.msg(`${name}’s galleon is coming for you!`, 4.5);
+    hud.msg(`Sink her, or board her and duel ${name} at the wheel`, 5);
+  });
+  on('bossWounded', ({ name, hp, cause }) => {
+    if (cause !== 'sword') hud.msg(hp <= 2 ? `${name} is badly hurt!` : `${name} shrugs off the shot!`, 2);
+  });
+  on('bossCaptainKilled', ({ name, cause }) => {
+    hud.msg(cause === 'sword' ? `You cut down ${name}!` : `${name} falls!`, 4);
+    hud.msg('Their crew throws down their arms and leaps overboard', 4);
+  });
+  on('crewOverboard', ({ pos }) => { fx.splash(pos, 0.7); audio.splash(pos, 0.6); });
+  on('bossDefeated', ({ name, how }) => {
+    if (how === 'sunk') hud.msg(`${name}’s galleon goes to the bottom!`, 4);
+    else if (how === 'crew') hud.msg(`${name}’s crew is finished!`, 4);
+    G.crew.cheer(); audio.cheer();
+  });
+  on('waveCleared', ({ next, nextIsBoss }) => {
+    if (!next) return;
+    hud.msg('The sea is ours, for now', 3);
+    if (nextIsBoss) hud.msg(`Make ready: ${G.voyages.bossName} is near`, 4);
+    else hud.msg(`More sails coming: ${listKinds(next)}`, 4);
+  });
+  on('voyageWon', ({ voyage, name }) => {
+    hud.msg('VOYAGE WON!', 5);
+    hud.msg(`${name} is done. Huzzah!`, 4);
+    hud.msg(`Voyage ${voyage + 1} sails soon, and they’ll be tougher`, 4.5);
+    G.crew.cheer(); audio.cheer(); audio.bell(); setTimeout(() => audio.bell(), 500); setTimeout(() => audio.bell(), 1000);
+    // Rockets over our ship, and the crew keeps cheering
+    const colours = [0xffd060, 0xff5040, 0x60c0ff, 0xffffff, 0x80ff80];
+    for (let i = 0; i < 9; i++) setTimeout(() => {
+      const p = new THREE.Vector3((Math.random() - 0.5) * 40, 28 + Math.random() * 14, (Math.random() - 0.5) * 40).add(G.ship.pos);
+      fx.firework(p, colours[i % colours.length]); audio.cannon(p);
+      if (i % 3 === 2) { G.crew.cheer(); audio.cheer(); }
+    }, 600 + i * 650);
+  });
+  on('shipRefitted', () => hud.msg('Ship refitted: hull patched, crew rested', 3.5));
 
   // ---- Grapples and boarding ----
   on('grappleFired', ({ pos }) => { fx.flash(pos, 0.8); fx.smoke(pos, G.grapples.gunDir(_a), 4, 0.3); audio.musket(pos); audio.swoosh(pos); });

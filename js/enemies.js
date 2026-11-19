@@ -36,15 +36,33 @@ const LOOKS = [
   { type: 'swashbuckler', vest: 0x3a2a20, sash: 0x1e1e1e, cutlass: true },
 ];
 
+// The boss: a captain in a crimson coat who stays at the wheel until you board, then comes for you.
+const BOSS_LOOK = { type: 'captain', coat: 0x7a1212, hat: 0x141010, sash: 0xc8a040, cutlass: true };
+
+// What each kind of enemy ship is like. Crew: [job, side, x, z] (where they start and,
+// for mates and riggers, where they keep watch).
+export const KINDS = {
+  // Small and quick, one gun a side, a crew of four
+  sloop: { health: 70, maxSpeed: 8.4, turnRate: 0.3, reloadTime: 10, gunZ: [-1], ballDamage: 4,
+    crew: [['helm', 0, HELM_SPOT.x, HELM_SPOT.z], ['gunner', -1, -1.3, -0.6], ['gunner', 1, 1.3, -0.6], ['mate', 0, -0.9, 2.8]] },
+  // The all-rounder, two guns a side, five crew
+  brigantine: { health: 110, maxSpeed: 7.6, turnRate: 0.22, reloadTime: 9, gunZ: [-3, 1], ballDamage: 5,
+    crew: [['helm', 0, HELM_SPOT.x, HELM_SPOT.z], ['gunner', -1, -1.3, -1], ['gunner', 1, 1.3, -1], ['rigger', 0, 0.9, -2.6], ['mate', 0, -0.9, 2.8]] },
+  // Big, slow and tough, three guns a side, eight crew
+  galleon: { health: 200, maxSpeed: 6.6, turnRate: 0.16, reloadTime: 8, gunZ: [-3, 1, 3.6], ballDamage: 6,
+    crew: [['helm', 0, HELM_SPOT.x, HELM_SPOT.z], ['gunner', -1, -1.3, -1], ['gunner', 1, 1.3, -1], ['gunner', -1, -1.3, 3], ['gunner', 1, 1.3, 3],
+      ['rigger', 0, 0.9, -2.6], ['mate', 0, -0.9, 2.2], ['mate', 0, 0.8, -4.6]] },
+};
+
 export class Enemies {
   constructor(G) {
     this.G = G; this.ships = []; this.boarders = [];
-    this.spawnT = G.debug ? 2 : 14; this.warnedBoard = false;
+    this.warnedBoard = false;
   }
 
-  maxShips() { return Math.min(1 + Math.floor(this.G.score / 2), 3); }
-
-  spawn() {
+  // Bring an enemy ship over the horizon. Voyages (voyages.js) decide which and when.
+  // o: { level: 0 for the first voyage, 1 for the next..., boss: { name } for a boss ship }
+  spawn(kind = 'brigantine', o = {}) {
     const G = this.G, P = G.ship;
     // Pick a spot in open water (the cove has land on most sides)
     let a = 0, d = 0, x = 0, z = 0;
@@ -54,29 +72,38 @@ export class Enemies {
       if (G.world.isOpenWater(x, z, 30)) break;
     }
     const heading = Math.atan2(-(P.pos.x - x), -(P.pos.z - z));
-    // Ship type is looks only for now (sloop, brigantine or galleon from the concept sheet).
-    const kind = G.score === 0 && this.ships.length === 0 ? 'sloop' : ['sloop', 'brigantine', 'galleon'][Math.floor(Math.random() * 3)];
-    const s = new Ship(G.scene, { id: G.ids.next('ship'), kind, x, z, heading, maxSpeed: 7.6, turnRate: 0.22, health: 100, sail: 1, reloadTime: 9 });
-    s.ai = { canBoard: this.ships.length === 0 && G.score === 0 ? true : Math.random() < 0.6, mode: 'approach', inRangeT: 0, boardT: 3, sent: 0 };
+    // Each voyage they come a bit tougher: stronger hulls, quicker reloads, a touch faster.
+    const K = KINDS[kind] || KINDS.brigantine, lv = o.level || 0, boss = o.boss || null;
+    const s = new Ship(G.scene, { id: G.ids.next('ship'), kind, x, z, heading, sail: 1, gunZ: K.gunZ, ballDamage: K.ballDamage + lv * 0.5,
+      maxSpeed: K.maxSpeed + lv * 0.2, turnRate: K.turnRate, health: Math.round(K.health * (1 + lv * 0.2) * (boss ? 1.2 : 1)),
+      reloadTime: K.reloadTime * Math.max(0.65, 1 - lv * 0.08) });
+    const first = !G.score && !this.ships.length;
+    s.ai = { canBoard: first || boss ? true : Math.random() < Math.min(0.85, 0.55 + lv * 0.1), mode: 'approach', inRangeT: 0, boardT: 3, sent: 0, aimErr: Math.max(0.012, 0.03 - lv * 0.005) };
     s.driftRudder = rand(-0.3, 0.3);
+    s.boss = boss; s.level = lv;
     // Every job on an enemy ship needs a living sailor: no helmsman, no steering; no gunner
     // at a cannon, no shot. Kill them all and the ship drifts.
-    const roles = [['helm', 0, HELM_SPOT.x, HELM_SPOT.z], ['gunner', -1, -1.3, -1], ['gunner', 1, 1.3, -1], ['rigger', 0, 0.9, -2.6], ['mate', 0, -0.9, 2.8]];
-    roles.forEach(([role, side, x, z], i) => {
-      const p = makePerson(LOOKS[i % LOOKS.length]);
+    K.crew.forEach(([role, side, x, z], i) => {
+      const chief = boss && i === 0;
+      const p = makePerson(chief ? BOSS_LOOK : LOOKS[i % LOOKS.length]);
+      if (chief) p.g.scale.setScalar(1.1);
       p.g.position.set(x, 0, z); s.root.add(p.g);
-      s.crew.push({ id: `${s.id}/crew:${i}`, p, role, side, hp: 2, cannon: null, aimT: 0, hitCD: 0, atkCD: rand(0.6, 1.2), swingHit: true, workT: 0 });
+      s.crew.push({ id: `${s.id}/crew:${i}`, p, role, side, home: [x, z], hp: chief ? 8 : 2, maxHp: chief ? 8 : 2, boss: chief ? boss.name : null,
+        cannon: null, aimT: 0, hitCD: 0, atkCD: rand(0.6, 1.2), swingHit: true, workT: 0 });
     });
     this.ships.push(s);
-    G.events.emit('enemySpawned', { ship: s, count: this.ships.length });
+    G.events.emit('enemySpawned', { ship: s, kind, boss, count: this.ships.filter((e) => e.hostile).length });
+    return s;
   }
+
+  // The boss captain of this ship, while still standing (null otherwise)
+  bossOf(e) { return e.crew.find((m) => m.boss && !m.p.dead) || null; }
 
   clearAll() {
     for (const s of this.ships) s.dispose();
     this.ships = [];
     for (const b of this.boarders) this.G.ship.root.remove(b.p.g);
     this.boarders = [];
-    this.spawnT = 14;
   }
 
   steer(e, desired) {
@@ -124,7 +151,7 @@ export class Enemies {
 
     // Cannons: aimed here, but only fired by a gunner standing at the breech (see updateCrew)
     for (const c of e.cannons) {
-      c.inArc = P.alive && e.aimCannon(c, P, 0.03);
+      c.inArc = P.alive && e.aimCannon(c, P, A.aimErr ?? 0.03);
       if (!c.inArc) { c.tElev = 0.05; c.tYaw = 0; }
     }
 
@@ -160,12 +187,27 @@ export class Enemies {
   // One of an enemy ship's own crew is killed (musket, cannonball or sword).
   killCrew(e, m, cause) {
     if (m.p.dead) return;
+    // A boss captain shrugs off a musket ball or two: it takes a duel (or a lot of lead)
+    if (m.boss && (cause === 'musket' || cause === 'cannon')) {
+      m.hp -= cause === 'cannon' ? 3 : 2;
+      if (m.hp > 0) { m.p.attack = -1; this.G.events.emit('bossWounded', { ship: e, name: m.boss, hp: m.hp, maxHp: m.maxHp, cause }); return; }
+    }
     m.p.dead = true; m.p.deadT = 0; m.p.pose = null;
     const left = e.crew.filter((x) => !x.p.dead).length;
-    this.G.events.emit('enemyCrewKilled', { ship: e, role: m.role, left, cause });
+    this.G.events.emit('enemyCrewKilled', { ship: e, role: m.role, left, cause, boss: m.boss });
     if (left === 0 && e.alive && !e.abandoned) {
       e.abandoned = true; e.ai.mode = 'adrift';
       this.G.events.emit('enemyAbandoned', { ship: e });
+    }
+    if (m.boss) {
+      // Their captain is dead: the rest throw down their cutlasses and go over the side
+      this.G.events.emit('bossCaptainKilled', { ship: e, name: m.boss, cause });
+      for (const o of e.crew) if (!o.p.dead) {
+        _a.set(o.p.g.position.x, 0, o.p.g.position.z); e.root.localToWorld(_a);
+        o.p.g.visible = false;
+        this.G.events.emit('crewOverboard', { ship: e, pos: _a.clone() });
+        this.killCrew(e, o, 'surrender');
+      }
     }
   }
 
@@ -210,7 +252,7 @@ export class Enemies {
     if (dead) this.assignRoles(e);
     // Who fights whom, if any of ours are aboard (the helmsman only joins in if they come close)
     const foes = this.intrudersOn(e);
-    const fighters = foes.length ? e.crew.filter((m) => !m.p.dead && (m.role !== 'helm' || foes.some((f) => Math.hypot(f.pos.x - m.p.g.position.x, f.pos.z - m.p.g.position.z) < 2.5))) : [];
+    const fighters = foes.length ? e.crew.filter((m) => !m.p.dead && (m.role !== 'helm' || m.boss || foes.some((f) => Math.hypot(f.pos.x - m.p.g.position.x, f.pos.z - m.p.g.position.z) < 2.5))) : [];
     const pairs = pairOff(fighters.map((m) => ({ pos: m.p.g.position })), foes);
     const foeOf = new Map(fighters.map((m, i) => [m, pairs[i]]));
     for (const m of e.crew) {
@@ -233,6 +275,7 @@ export class Enemies {
         let best = null, bs = 1e9;
         for (const c of e.cannons) {
           if (m.side && c.side !== m.side) continue;
+          if (e.crew.some((o) => o !== m && !o.p.dead && o.role === 'gunner' && o.cannon === c)) continue;
           const ready = e.cannonReady(c) && c.inArc;
           const sc = Math.abs(c.z - pos.z) + Math.abs(c.side * 1.25 - pos.x) * 0.3 + (ready ? 0 : c.reload > 0 ? 6 : 12);
           if (sc < bs) { bs = sc; best = c; }
@@ -247,7 +290,7 @@ export class Enemies {
         } else moving = !!best;
       } else {
         // Rigger hauls on the lines when the sails change; the mate keeps an eye on us
-        const want = m.role === 'rigger' ? [0.9, -2.6] : [-0.9, 2.8];
+        const want = m.home && m.home[0] !== HELM_SPOT.x ? m.home : m.role === 'rigger' ? [0.9, -2.6] : [-0.9, 2.8];
         if (m.role === 'rigger') { if (Math.abs(e.sail - (m.lastSail ?? e.sail)) > 0.02) m.workT = 2.2; m.lastSail = e.sail; }
         if (this.walk(m, want[0], want[1], dt)) {
           m.workT -= dt;
@@ -281,11 +324,11 @@ export class Enemies {
       const ox = pos.x - o.p.g.position.x, oz = pos.z - o.p.g.position.z, od = Math.hypot(ox, oz);
       if (od < 0.75 && od > 1e-3) { pos.x += (ox / od) * (0.75 - od) * 0.5; pos.z += (oz / od) * (0.75 - od) * 0.5; }
     }
-    if (d < 1.45 && m.atkCD <= 0 && p.attack < 0) { p.attack = 0; m.swingHit = false; m.atkCD = rand(1.8, 2.8); }
+    if (d < 1.45 && m.atkCD <= 0 && p.attack < 0) { p.attack = 0; m.swingHit = false; m.atkCD = m.boss ? rand(1.2, 1.9) : rand(1.8, 2.8); }
     if (p.attack > 0.62 && !m.swingHit) {
       m.swingHit = true;
       _a.set(pos.x, 1.3, pos.z); e.root.localToWorld(_a); this.G.events.emit('boarderSwing', { pos: _a });
-      if (d < 1.7 && pl) this.G.hurtPlayer(pl, 7);
+      if (d < 1.7 && pl) this.G.hurtPlayer(pl, m.boss ? 12 : 7);
       else if (d < 1.7 && Math.random() < 0.6) this.G.events.emit('parried', { pos: _a });
     }
     animatePerson(p, dt, moving, t);
@@ -297,8 +340,9 @@ export class Enemies {
     m.hp -= dmg; m.hitCD = 0.35;
     const d = Math.hypot(kx, kz) || 1;
     m.p.g.position.x += (kx / d) * 0.35; m.p.g.position.z += (kz / d) * 0.35;
-    m.p.attack = -1; m.atkCD = Math.max(m.atkCD, 0.9);
+    m.p.attack = -1; m.atkCD = Math.max(m.atkCD, m.boss ? 0.6 : 0.9);
     if (m.hp <= 0) this.killCrew(e, m, 'sword');
+    else if (m.boss) this.G.events.emit('bossWounded', { ship: e, name: m.boss, hp: m.hp, maxHp: m.maxHp, cause: 'sword' });
   }
 
   spawnBoarder(e) {
@@ -403,12 +447,6 @@ export class Enemies {
   }
 
   update(dt, t) {
-    const G = this.G;
-    const alive = this.ships.filter((s) => s.hostile).length;
-    if (alive < this.maxShips() && G.ship.alive) {
-      this.spawnT -= dt;
-      if (this.spawnT <= 0) { this.spawn(); this.spawnT = rand(18, 26); }
-    }
     for (let i = this.ships.length - 1; i >= 0; i--) {
       const e = this.ships[i];
       if (e.alive) this.ai(e, dt);

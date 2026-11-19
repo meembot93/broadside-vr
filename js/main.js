@@ -5,6 +5,7 @@ import { Effects } from './effects.js';
 import { Sound } from './audio.js';
 import { Combat } from './combat.js';
 import { Enemies } from './enemies.js';
+import { Voyages } from './voyages.js';
 import { Player } from './player.js';
 import { Crew } from './crew.js';
 import { Grapples } from './grapple.js';
@@ -48,6 +49,7 @@ G.fx = new Effects(scene);
 G.audio = new Sound();
 G.combat = new Combat(G);
 G.enemies = new Enemies(G);
+G.voyages = new Voyages(G);       // waves of enemies, boss fights, victory (see voyages.js)
 G.player = new Player(G);          // you, on this headset
 G.players = [G.player];             // everyone on board; friends get added here later
 G.items = G.player.items;           // muskets and cutlass on the rack (shared by the crew of players)
@@ -88,6 +90,7 @@ function resetGame() {
   for (const pl of G.players) pl.respawn();
   G.score = 0; G.state = 'play';
   G.events.emit('gameReset');
+  G.voyages.restart(); // same voyage, from its first wave
 }
 
 // ---------- Start screen ----------
@@ -211,6 +214,7 @@ function simulate(dt) {
 
   if (playing && G.started) {
     G.grapples.update(dt);
+    G.voyages.update(dt);
     G.enemies.update(dt, t);
     G.grapples.checkPrize();
     aimPlayerCannons();
@@ -255,7 +259,3 @@ function simulate(dt) {
 G.simulate = simulate;
 renderer.setAnimationLoop(tick);
 
-if (G.debug) {
-  // Testing shortcuts
-  G.enemies.spawnT = 1;
-}

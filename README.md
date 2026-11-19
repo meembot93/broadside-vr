@@ -7,6 +7,12 @@ A VR pirate ship game for Meta Quest, played in the Quest Browser (WebXR + three
 Open the GitHub Pages link in the Quest Browser and press **Enter VR**.
 Add `?debug` to the address to make enemies spawn quickly and close by.
 
+The game is played in **voyages** (`js/voyages.js`): a few fights against sloops and
+brigantines, then a boss galleon under a named captain. Sink her, or board her and duel the
+captain at the wheel (killing him makes his crew jump overboard). Win and the ship is refitted
+and a harder voyage begins; lose the ship and the voyage starts over. For testing,
+`?voyage=2` starts on voyage 2 and `?wave=3` jumps to the boss fight.
+
 ## Controls
 
 **Quest:** left stick walk, right stick snap turn (45°), grip = grab, trigger = fire.
