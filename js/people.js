@@ -303,10 +303,12 @@ export function makePerson(o = {}) {
   const armL = new THREE.Group(); armL.position.set(-0.305, 1.45, 0);
   const armR = new THREE.Group(); armR.position.set(0.305, 1.45, 0);
   k = new Kit(); buildArm(k, c, -1, false); armL.add(k.mesh());
-  k = new Kit(); buildArm(k, c, 1, !!o.cutlass); armR.add(k.mesh());
+  k = new Kit(); buildArm(k, c, 1, false); armR.add(k.mesh());
+  // The cutlass is its own mesh so it can be drawn (shown) when a fight starts
+  k = new Kit(); addCutlass(k, 0.66, [0, -0.635, -0.005]); const sword = k.mesh(); sword.visible = !!o.cutlass; armR.add(sword);
   body.add(armL, armR);
   armL.rotation.z = -0.1; armR.rotation.z = 0.1;
-  return { g, body, legL, legR, armL, armR, head, type, phase: Math.random() * 6, attack: -1, cheer: 0, pose: null, dead: false, deadT: 0, lookT: 0 };
+  return { g, body, legL, legR, armL, armR, head, sword, type, phase: Math.random() * 6, attack: -1, cheer: 0, pose: null, dead: false, deadT: 0, lookT: 0 };
 }
 
 // attack: progress 0..1 of a swing (set p.attack = 0 to start one)

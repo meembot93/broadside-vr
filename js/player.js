@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { halfWidth, RACK, WHEEL_MAX } from './ship.js';
 import { GRAPPLE_RANGE } from './grapple.js';
+import { ORDER_TEXT } from './crew.js';
 import { clamp, angleWrap, canvasTex } from './util.js';
 import { Kit, addCutlass, addMusket } from './kit.js';
 
@@ -132,6 +133,9 @@ export class Player {
       ctrl.addEventListener('disconnected', () => { this.release(h); h.src = null; h.gp = null; h.evTrig = h.evSq = false; });
       this.hands.push(h);
     }
+    // Orders card on the left wrist: what Hawkins is doing and how to change it
+    this.orderCard = makeLabel(640, 230, 0.22);
+    this.orderCard.renderOrder = 995;
     if (this.G.debug) {
       this.dbg = makeLabel(768, 256, 0.45);
       this.dbg.position.set(0, 0.12, -0.05);
@@ -195,6 +199,8 @@ export class Player {
     consider('lever', _a.distanceTo(_c), 0.3, { point: _c.clone() });
     const gh = this.G.grapples.handle.getWorldPosition(_c);
     consider('grapple', _a.distanceTo(gh), 0.3, { point: _c.clone() });
+    const keg = this.ship.keg;
+    if (keg && keg.fuse === -1 && keg.obj.visible) { keg.obj.getWorldPosition(_c); _c.y += 0.55; consider('keg', _a.distanceTo(_c), 0.5, { point: _c.clone() }); }
     for (const c of ship.cannons) {
       _seg.start.set(0, 0.05, 0.7); _seg.end.set(0, 0.05, -0.3);
       c.elev.localToWorld(_seg.start); c.elev.localToWorld(_seg.end);
@@ -229,6 +235,15 @@ export class Player {
       }
       return;
     }
+    if (t.kind === 'keg') { this.lightKeg(h); return; }
+    if (t.kind === 'grapple') {
+      // Aiming works by moving your hand: right swings the gun right, up raises it
+      const gr = this.G.grapples;
+      this.G.act({ type: 'holdGrapple', hold: true });
+      this.handPos(h, _b); this.ship.root.worldToLocal(_b);
+      this.G.camera.getWorldPosition(_c); this.ship.root.worldToLocal(_c);
+      h.gStart = { yaw: gr.aimYaw, pitch: gr.aimPitch, a0: Math.atan2(-(_b.x - _c.x), -(_b.z - _c.z)), y0: _b.y };
+    }
     if (t.kind === 'grapple' && !this.toldGrapple) {
       this.toldGrapple = true;
       this.G.hud.msg('Point it at an enemy ship and pull TRIGGER', 4);
@@ -247,6 +262,7 @@ export class Player {
 
   release(h) {
     const it = h.held;
+    if (it === 'grapple') this.G.act({ type: 'holdGrapple', hold: false });
     if (it === 'support') { if (h.supporting) h.supporting.support = null; h.supporting = null; }
     if (it && typeof it === 'object') {
       if (it.support) { const o = it.support; it.support = null; o.supporting = null; o.held = null; }
@@ -262,6 +278,7 @@ export class Player {
     if (h.held === 'grapple') { this.fireGrapple(h); return; }
     if (h.held) return;
     const t = this.findTarget(h);
+    if (t && t.kind === 'keg') { this.lightKeg(h); return; }
     if (t && t.kind === 'cannon') this.useCannon(h, t.c);
     else if (t) this.G.hud.msg('Squeeze GRIP (the side button) to grab', 2);
   }
@@ -276,7 +293,8 @@ export class Player {
       else if (t.kind === 'item') text = t.it.kind === 'musket' ? 'GRIP to take musket' : 'GRIP to take cutlass';
       else if (t.kind === 'wheel') text = 'GRIP to steer';
       else if (t.kind === 'lever') text = 'GRIP and push:\nmore sail';
-      else if (t.kind === 'grapple') text = this.G.grapples.anyLineOut() ? 'GRIP, TRIGGER:\ncut the lines' : 'GRIP to aim\nthe grapple';
+      else if (t.kind === 'grapple') text = this.G.grapples.anyLineOut() ? 'GRIP, TRIGGER:\ncut the lines' : 'GRIP, then move\nyour hand to aim';
+      else if (t.kind === 'keg') text = 'TRIGGER to light\nthe powder keg';
       else if (t.kind === 'cannon') text = this.G.ship.cannonReady(t.c) ? 'TRIGGER to fire!' : `Reloading... ${Math.ceil(t.c.reload)}`;
     }
     const key = t ? t.kind + (t.it ? t.it.kind + this.items.indexOf(t.it) : '') + (t.c ? this.G.ship.cannons.indexOf(t.c) : '') : '';
@@ -312,6 +330,21 @@ export class Player {
     _m.lookAt(from, to, _p);      // makes -Z point from 'from' to 'to'
     _q.setFromRotationMatrix(_m);
     it.obj.quaternion.copy(_q2.invert()).multiply(_q);
+  }
+
+  // Light the keg on the prize you're standing on, then run for it.
+  lightKeg(h) {
+    if (this.G.act({ type: 'lightKeg', ship: this.ship.id }) && h) this.haptic(h, 0.6, 60);
+  }
+
+  // Holding the grapple gun: it swings as your hand moves around it (2x, so small moves go far).
+  aimGrapple(h) {
+    const st = h.gStart; if (!st) return;
+    this.handPos(h, _b); this.ship.root.worldToLocal(_b);
+    this.G.camera.getWorldPosition(_c); this.ship.root.worldToLocal(_c);
+    const a = Math.atan2(-(_b.x - _c.x), -(_b.z - _c.z));
+    this.G.act({ type: 'aimGrapple', yaw: st.yaw + angleWrap(a - st.a0) * 2, pitch: st.pitch + (_b.y - st.y0) * 1.2 });
+    this.G.grapples.aimShown = true;
   }
 
   // Fire the grapple hook where the gun points (or cut the lines if they're out).
@@ -398,6 +431,7 @@ export class Player {
       if (trig && !h.trig) this.triggerPress(h);
       h.trig = trig; h.sq = sq;
       // A or X: next order for the helmsman
+      if (h.side === 'left' && this.orderCard.parent !== h.grip) { h.grip.add(this.orderCard); this.orderCard.position.set(0, 0.11, 0.06); }
       const ab = btn(4);
       if (ab && !h.ab && !this.dead) { this.G.act({ type: 'order' }); this.haptic(h, 0.3, 30); }
       h.ab = ab;
@@ -405,7 +439,7 @@ export class Player {
       h.glove.scale.set(1, sq ? 0.7 : 1, sq ? 0.8 : 1);
       h.glove.userData.palm.material.emissive.setHex(trig ? 0x7a3a10 : sq ? 0x2e2010 : 0x000000);
       if (h.held && h.held.kind === 'musket') this.aimTwoHanded(h);
-      if (h.held === 'grapple') { h.ctrl.getWorldQuaternion(_q); this.G.act({ type: 'aimGrapple', dir: _b.set(0, 0, -1).applyQuaternion(_q) }); }
+      if (h.held === 'grapple') this.aimGrapple(h);
       if (h.held === 'wheel') this.updateWheel(h, dt);
       else if (h.held === 'lever') this.updateLever(h);
       this.updateHover(h);
@@ -465,8 +499,19 @@ export class Player {
     else { it.obj.position.set(0.3, -0.32, -0.4); it.obj.rotation.set(0.7, 0.35, 0); }
   }
 
+  // Words on the wrist card (VR) / desktop status line
+  orderText() {
+    const C = this.G.crew, steering = this.G.ship.helmBy === C.hm.id;
+    return `Hawkins: ${ORDER_TEXT[C.order]}\n${steering ? 'He has the wheel' : 'Walk away from the wheel: he steers'}\nPress A or X to change`;
+  }
+
   deskUse() {
     const G = this.G, it = this.deskItem;
+    const keg = this.ship.keg;
+    if (keg && keg.fuse === -1 && keg.obj.visible) {
+      G.camera.getWorldPosition(_a); keg.obj.getWorldPosition(_b); _b.y += 0.5;
+      if (_a.distanceTo(_b) < 3) { this.lightKeg(null); return; }
+    }
     if (it && it.kind === 'musket') { this.fireMusket(it, null); return; }
     if (it && it.kind === 'sword') { if (this.swing < 0) { this.swing = 0; this.swingHit = false; G.audio.swoosh(null); } return; }
     G.camera.getWorldPosition(_a); G.camera.getWorldDirection(_c);
@@ -546,6 +591,7 @@ export class Player {
   // fast you swing it is input.
   updateView(dt) {
     const G = this.G, ship = this.ship;
+    if (this.orderCard) { this.orderCard.userData.set(this.orderText()); this.orderCard.visible = G.mode === 'vr' && !!this.orderCard.parent; }
     this.hurtFlash = Math.max(0, this.hurtFlash - dt * 2.5);
     const op = this.dead ? 0.85 : this.hurtFlash * 0.45 + Math.max(0, 0.5 - this.health / 100) * 0.4;
     this.vignette.material.opacity = op; this.vignette.visible = op > 0.01;

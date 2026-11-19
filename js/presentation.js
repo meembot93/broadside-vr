@@ -88,8 +88,18 @@ export function wirePresentation(G) {
   on('strandedAboard', ({ player }) => { if (isMe(player)) hud.msg('She’s going down! You scramble back aboard', 3); });
   on('prizeTaken', ({ score }) => {
     hud.msg('She’s ours! Prize taken', 3.5); hud.msg('Plundered timber patches our hull', 3);
+    hud.msg('Light the powder keg by her mast to blow her up', 4.5);
     G.crew.cheer(); audio.cheer(); audio.bell();
   });
+  on('kegLit', ({ pos }) => { audio.fuse(pos); hud.msg('Fuse lit! Get back to our ship!', 4); });
+  on('kegExploded', ({ pos }) => {
+    fx.flash(pos, 7); fx.debris(pos, 40); fx.smoke(pos, _a.set(0, 1, 0), 30, 2.5); fx.splash(pos, 3);
+    audio.cannon(pos); setTimeout(() => audio.cannon(pos), 120); audio.woodHit(pos);
+    for (const h of me.hands) me.haptic(h, 1, 300);
+    hud.msg('KABOOM! She’s going to the bottom', 3.5);
+    G.crew.cheer(); setTimeout(() => audio.cheer(), 700);
+  });
+  on('crewBoards', ({ name }) => hud.msg(`${name} is boarding with you!`, 1.5));
   on('prizeScuttled', () => hud.msg('The prize is cut loose and scuttled', 3));
 
   // ---- Our helm and crew ----

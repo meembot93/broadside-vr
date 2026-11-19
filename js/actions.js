@@ -75,9 +75,19 @@ export function applyAction(G, a) {
     case 'swordSweep':
       return G.combat.swordCheck(player, a.hilt, a.tip, a.speed);
     // Swing the grapple gun to point along dir (world).
-    case 'aimGrapple':
-      G.grapples.aimAlong(a.dir);
+    // Take hold of / let go of the grapple gun.
+    case 'holdGrapple':
+      G.grapples.heldBy = a.hold ? player.id : (G.grapples.heldBy === player.id ? null : G.grapples.heldBy);
       return true;
+    // Swing the grapple gun: yaw/pitch (ship-local radians), or along dir (world).
+    case 'aimGrapple':
+      if (a.dir) G.grapples.aimAlong(a.dir); else G.grapples.setAim(a.yaw, a.pitch);
+      return true;
+    // Light the powder keg on a captured ship.
+    case 'lightKeg': {
+      const e = G.byId(a.ship);
+      return !!e && player.ship === e && G.grapples.lightKeg(e);
+    }
     // Fire the grapple hook along dir (world), or cut the lines if any are out.
     case 'fireGrapple':
       if (G.grapples.anyLineOut()) return G.grapples.cut() ? 'cut' : 'busy';
