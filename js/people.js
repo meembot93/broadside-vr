@@ -46,7 +46,7 @@ export function makePerson(o = {}) {
   for (const a of [armL, armR]) { a.add(new THREE.Mesh(GEO.arm, M(o.shirt ?? 0xdcd2bb)), new THREE.Mesh(GEO.hand, M(skin))); body.add(a); }
   armL.rotation.z = -0.08; armR.rotation.z = 0.08;
   if (o.cutlass) { armR.add(new THREE.Mesh(GEO.blade, M(0xc9ccd4)), new THREE.Mesh(GEO.guard, M(0xb08a3a))); }
-  return { g, body, legL, legR, armL, armR, head, phase: Math.random() * 6, attack: -1, cheer: 0, dead: false, deadT: 0, lookT: 0 };
+  return { g, body, legL, legR, armL, armR, head, phase: Math.random() * 6, attack: -1, cheer: 0, pose: null, dead: false, deadT: 0, lookT: 0 };
 }
 
 // attack: progress 0..1 of a swing (set p.attack = 0 to start one)
@@ -63,6 +63,16 @@ export function animatePerson(p, dt, moving, t = 0) {
   p.legL.rotation.x = s * 0.6; p.legR.rotation.x = -s * 0.6;
   let al = -s * 0.5, ar = s * 0.5;
   if (!moving) { al += Math.sin(t * 1.3 + p.phase) * 0.04; ar -= Math.sin(t * 1.1) * 0.04; }
+  // Work poses (only while standing still): steer, haul, ram, point
+  p.body.rotation.x = 0;
+  if (!moving && p.pose) {
+    const w = t * 3 + p.phase;
+    if (p.pose === 'steer') { al = 1.15 + Math.sin(t * 0.7) * 0.12; ar = 1.15 - Math.sin(t * 0.7) * 0.12; }
+    else if (p.pose === 'haul') { const k = Math.sin(w); al = -1.6 + k * 1.0; ar = -1.6 - k * 1.0; p.body.rotation.x = 0.12; }
+    else if (p.pose === 'ram') { const k = Math.sin(w * 1.4); al = ar = 1.25 + k * 0.35; p.body.rotation.x = -0.12 - k * 0.06; }
+    else if (p.pose === 'point') { ar = 1.55; }
+    else if (p.pose === 'aim') { al = 1.45; ar = 1.15; }
+  }
   if (p.attack >= 0) {
     p.attack += dt / 0.55;
     const u = p.attack;

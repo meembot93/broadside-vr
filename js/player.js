@@ -85,6 +85,7 @@ export class Player {
     this.dolly.position.set(0, 0, 6.5);
     this.dolly.add(G.camera); G.camera.position.set(0, 1.7, 0);
     this.health = 100; this.lastHurt = -99; this.dead = false; this.hurtFlash = 0;
+    this.ship = ship; // the ship this player is standing on
     this.headLocal = new THREE.Vector3(0, 1.7, 6.5);
     this.hands = []; this.snapLatch = false;
     this.yaw = 0; this.pitch = 0; this.keys = {}; this.deskItem = null; this.swing = -1; this.deskReady = false;
@@ -371,6 +372,10 @@ export class Player {
       if (!sq && h.sq) this.release(h);
       if (trig && !h.trig) this.triggerPress(h);
       h.trig = trig; h.sq = sq;
+      // A or X: next order for the helmsman
+      const ab = btn(4);
+      if (ab && !h.ab && !this.dead) { this.G.act({ type: 'order' }); this.haptic(h, 0.3, 30); }
+      h.ab = ab;
       // Glove clenches and lights up so you can see the buttons are working
       h.glove.scale.set(1, sq ? 0.7 : 1, sq ? 0.8 : 1);
       h.glove.userData.palm.material.color.setHex(trig ? 0xc87a3a : sq ? 0x7a5230 : 0x4a2e1a);
@@ -403,6 +408,7 @@ export class Player {
       if (e.code === 'Digit1') this.equip('musket');
       if (e.code === 'Digit2') this.equip('sword');
       if (e.code === 'Digit3') this.equip(null);
+      if (e.code === 'KeyT') this.G.act({ type: 'order' });
       if (e.code === 'Space') { e.preventDefault(); if (!this.G.act({ type: 'broadside' })) this.G.hud.msg('No target in the cannons’ arc', 1.5); }
     });
     document.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
