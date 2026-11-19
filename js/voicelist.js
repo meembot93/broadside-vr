@@ -4,19 +4,10 @@
 export const VOICE_LINES = {
  "sighted": [
   {
-   "id": "sighted1",
+   "id": "sighted_rec1",
    "who": "Finn",
-   "text": "Arr, there she be, matey! Sail off the bow!"
-  },
-  {
-   "id": "sighted2",
-   "who": "Finn",
-   "text": "Sail ho! Enemy ship, Captain!"
-  },
-  {
-   "id": "sighted3",
-   "who": "Finn",
-   "text": "Ship on the horizon! She's flyin' the black!"
+   "text": "Arr, there she be, matey! Sail off the bow!",
+   "recorded": true
   }
  ],
  "sightedMore": [
@@ -78,19 +69,10 @@ export const VOICE_LINES = {
  ],
  "hooked": [
   {
-   "id": "hooked1",
+   "id": "hooked_rec1",
    "who": "Finn",
-   "text": "Arr, we hooked her, matey!"
-  },
-  {
-   "id": "hooked2",
-   "who": "Finn",
-   "text": "Got her! Haulin' her alongside!"
-  },
-  {
-   "id": "hooked3",
-   "who": "Finn",
-   "text": "She's hooked! Haul away, lads!"
+   "text": "Arr, we hooked her, matey! Haulin' her alongside!",
+   "recorded": true
   }
  ],
  "missed": [
@@ -114,14 +96,10 @@ export const VOICE_LINES = {
  ],
  "lashed": [
   {
-   "id": "lashed1",
+   "id": "lashed_rec1",
    "who": "Mags",
-   "text": "She's lashed alongside! Over the rail, me hearties!"
-  },
-  {
-   "id": "lashed2",
-   "who": "Mags",
-   "text": "Board her, lads! For plunder!"
+   "text": "She's lashed alongside! Over the rail, me hearties!",
+   "recorded": true
   }
  ],
  "theyLashed": [
@@ -281,26 +259,18 @@ export const VOICE_LINES = {
  ],
  "order_chase": [
   {
-   "id": "order_chase1",
+   "id": "order_chase_rec1",
    "who": "Hawkins",
-   "text": "Aye aye, Captain! After 'em!"
-  },
-  {
-   "id": "order_chase2",
-   "who": "Hawkins",
-   "text": "Arr, we'll run 'em down!"
+   "text": "Aye aye, Captain! After 'em!",
+   "recorded": true
   }
  ],
  "order_alongside": [
   {
-   "id": "order_alongside1",
+   "id": "order_alongside_rec1",
    "who": "Hawkins",
-   "text": "Aye, bringin' us alongside."
-  },
-  {
-   "id": "order_alongside2",
-   "who": "Hawkins",
-   "text": "Aye aye! Close on her, lads!"
+   "text": "Aye, bringin' us alongside, matey.",
+   "recorded": true
   }
  ],
  "order_heave": [

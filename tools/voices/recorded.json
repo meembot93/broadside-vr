@@ -28,5 +28,35 @@
     "who": "Bones",
     "text": "Yo ho ho! The voyage be won, me hearties!",
     "pitch": -3
+  },
+  "sighted_rec1": {
+    "group": "sighted",
+    "who": "Finn",
+    "text": "Arr, there she be, matey! Sail off the bow!",
+    "pitch": 0
+  },
+  "hooked_rec1": {
+    "group": "hooked",
+    "who": "Finn",
+    "text": "Arr, we hooked her, matey! Haulin' her alongside!",
+    "pitch": 0
+  },
+  "order_chase_rec1": {
+    "group": "order_chase",
+    "who": "Hawkins",
+    "text": "Aye aye, Captain! After 'em!",
+    "pitch": -2
+  },
+  "order_alongside_rec1": {
+    "group": "order_alongside",
+    "who": "Hawkins",
+    "text": "Aye, bringin' us alongside, matey.",
+    "pitch": -2
+  },
+  "lashed_rec1": {
+    "group": "lashed",
+    "who": "Mags",
+    "text": "She's lashed alongside! Over the rail, me hearties!",
+    "pitch": 1
   }
 }
