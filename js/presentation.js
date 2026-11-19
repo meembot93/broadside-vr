@@ -170,6 +170,59 @@ export function wirePresentation(G) {
   });
   on('deckCleared', () => hud.msg('Deck cleared!', 2));
 
+  // ---- Damage and repairs (damage.js) ----
+  const desk = () => G.mode === 'desktop';
+  const told = {};
+  const once = (k, fn) => { if (!told[k]) { told[k] = true; fn(); } };
+  on('leakSprung', ({ pos, count }) => {
+    fx.splash(pos, 0.25);
+    once('leak', () => {
+      hud.msg('We’re holed! Water’s pouring in', 3);
+      hud.msg(desk() ? 'Press 4 for the hammer, look at the leak and click' : 'Grab the hammer by the water tub and bang the leak shut', 4.5);
+    });
+    if (count >= 3 && told.leak) once('leaks3', () => hud.msg('Three leaks! She’s getting sluggish', 3));
+  });
+  on('leakHammered', ({ pos }) => { audio.knock(pos); fx.hit(pos); });
+  on('leakPatched', ({ pos, left, player }) => {
+    audio.knock(pos); fx.debris(pos, 5);
+    if (player) hud.msg(left ? `Leak patched! ${left} more to go` : 'Leak patched!', 2);
+  });
+  on('fireStarted', ({ pos }) => {
+    fx.flash(pos, 1.2); audio.fuse(pos);
+    once('fire', () => {
+      hud.msg('FIRE on deck!', 2.5);
+      hud.msg(desk() ? 'Press 5 for the bucket, fill it at the tub, click at the fire' : 'Fill the bucket at the water tub and tip it over the flames', 4.5);
+    });
+  });
+  on('fireSpread', () => hud.msg('The fire’s spreading!', 2.5));
+  on('fireShrunk', ({ pos }) => { audio.hiss(pos); fx.smoke(pos, _a.set(0, 1, 0), 6, 0.5); });
+  on('fireDoused', ({ pos, left }) => { audio.hiss(pos); fx.smoke(pos, _a.set(0, 1, 0), 10, 0.6); hud.msg(left ? 'That one’s out!' : 'Fire’s out!', 2); });
+  on('bucketFilled', ({ pos }) => { if (pos) { audio.splash(pos, 0.3); fx.splash(pos, 0.12); } });
+  on('bucketPoured', ({ from, to, fires }) => {
+    if (from) {
+      audio.splash(from, 0.6);
+      for (let i = 0; i < 16; i++) {
+        _a.copy(to).sub(from); const k = 0.6 + Math.random() * 0.6;
+        fx.emit(from, { vel: _a.set(_a.x * 1.6 * k + (Math.random() - 0.5), 2 + Math.random() * 1.5, _a.z * 1.6 * k + (Math.random() - 0.5)), life: 0.7, s0: 0.12, s1: 0.3, color: 0xdcefff, grav: 9, alpha: 0.85 });
+      }
+    }
+    if (to) setTimeout(() => fx.splash(to, 0.3), 350);
+    if (!fires && G.damage.fires.length) hud.msg('Missed! Get closer to the flames', 1.8);
+  });
+  on('mastSnapped', ({ pos, name }) => {
+    audio.crack(pos); fx.debris(pos, 20);
+    for (const h of me.hands) me.haptic(h, 0.8, 200);
+    hud.msg(`The ${name} is snapped! We’ve lost speed`, 3.5);
+    once('mast', () => hud.msg(desk() ? 'Press 4 for the hammer and click at the foot of the mast' : 'Take the hammer and bang a splint onto the break, 6 blows', 4.5));
+  });
+  on('mastHammered', ({ pos }) => { audio.knock(pos); fx.hit(pos); });
+  on('mastRepaired', ({ pos, name, player }) => {
+    audio.knock(pos); audio.creak(pos);
+    hud.msg(player ? `The ${name} is splinted and standing!` : `The crew splinted the ${name}`, 3);
+    if (player) { G.crew.cheer(); audio.cheer(); }
+  });
+  on('crewRepaired', ({ what }) => { if (what === 'leak') hud.msg('The crew patched a leak', 2); });
+
   // ---- Players ----
   on('playerHurt', ({ player }) => {
     if (!isMe(player)) return;
