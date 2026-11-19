@@ -382,10 +382,10 @@ export class Player {
       return;
     }
     if (up.y < 0.2 && it.hitCD <= 0) {
-      // The water flies out the way the mouth faces and lands on the deck about a metre away
+      // The water flies out the way the mouth faces and lands on the deck a little way off
       S.root.getWorldQuaternion(_q).invert(); up.applyQuaternion(_q); up.y = 0;
       if (up.lengthSq() > 1e-4) up.normalize();
-      const x = ml.x + up.x * 0.9, z = ml.z + up.z * 0.9;
+      const x = ml.x + up.x * 0.7, z = ml.z + up.z * 0.7;
       it.hitCD = 0.5;
       G.act({ type: 'pourBucket', item: it.id, x, z, from: mouth.clone(), to: S.root.localToWorld(new THREE.Vector3(x, 0.1, z)) });
       this.haptic(h, 0.6, 120);
@@ -652,7 +652,7 @@ export class Player {
     this.deskItem = it; it.returning = false;
     this.G.camera.add(it.obj);
     if (kind === 'musket') { it.obj.position.set(0.2, -0.2, -0.28); it.obj.rotation.set(0, 0, 0); }
-    else if (kind === 'bucket') { it.obj.position.set(0.25, -0.12, -0.45); it.obj.rotation.set(0, 0, 0); }
+    else if (kind === 'bucket') { it.obj.position.set(0.32, -0.2, -0.62); it.obj.rotation.set(0.25, 0, 0); }
     else { it.obj.position.set(0.3, -0.32, -0.4); it.obj.rotation.set(0.7, 0.35, 0); }
     if (!this.toldItem?.['desk' + kind] && (kind === 'hammer' || kind === 'bucket')) {
       this.toldItem = { ...this.toldItem, ['desk' + kind]: true };

@@ -41,13 +41,16 @@ export function buildHammer() {
 export function buildBucket() {
   const obj = new THREE.Group(), inner = new THREE.Group(); obj.add(inner);
   const k = new Kit(), cy = -0.13, cz = -0.1; // body centre (below and ahead of the hand)
-  k.cyl(0.15, 0.12, 0.26, 10, 0x8a5a32, [0, cy, cz]);
+  k.add(new THREE.CylinderGeometry(0.15, 0.12, 0.26, 10, 1, true), 0x8a5a32, [0, cy, cz]);      // open-topped wall
+  k.add(new THREE.CircleGeometry(0.12, 10).rotateX(Math.PI / 2), 0x6a4022, [0, cy - 0.13, cz]); // bottom
+  k.add(new THREE.CircleGeometry(0.14, 10).rotateX(-Math.PI / 2), 0x3a2414, [0, cy + 0.06, cz]); // dark inside
+  k.add(new THREE.TorusGeometry(0.148, 0.012, 4, 12), 0x6a4022, [0, cy + 0.13, cz], [Math.PI / 2, 0, 0]); // rim
   for (const y of [-0.09, 0.0, 0.1]) k.cyl(0.125 + (y + 0.13) * 0.11, 0.125 + (y + 0.13) * 0.11, 0.025, 10, 0x2e2a28, [0, cy + y, cz]);
   k.tube([[-0.15, cy + 0.12, cz], [-0.1, cy + 0.25, cz], [0, cy + 0.29, cz], [0.1, cy + 0.25, cz], [0.15, cy + 0.12, cz]], 0.008, COL.ironDark, 4);
-  k.cyl(0.12, 0.12, 0.01, 10, 0x2a1a10, [0, cy - 0.12, cz]); // dark inside bottom
   inner.add(k.mesh());
   const water = new THREE.Mesh(new THREE.CircleGeometry(0.135, 12).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x3f7fa0 }));
   water.position.set(0, cy + 0.09, cz); inner.add(water);
+  water.scale.setScalar(1.02);
   const mouth = new THREE.Object3D(); mouth.position.set(0, cy + 0.13, cz); inner.add(mouth);
   return { obj, inner, water, mouth };
 }
@@ -87,7 +90,7 @@ export class Damage {
   buildStation() {
     const S = this.S, k = new Kit();
     const { x, z, r, h } = TUB;
-    k.cyl(r, r * 0.92, h, 12, 0x7a5030, [x, h / 2, z]);
+    k.add(new THREE.CylinderGeometry(r, r * 0.92, h, 12, 1, true), 0x7a5030, [x, h / 2, z]);
     for (const y of [0.1, h - 0.1]) k.cyl(r + 0.012, r + 0.012, 0.04, 12, 0x2e2a28, [x, y, z]);
     k.add(new THREE.TorusGeometry(r - 0.02, 0.03, 4, 14), 0x6a4628, [x, h, z], [Math.PI / 2, 0, 0]);
     // Peg board on the bulwark for the hammer and a hook for the bucket
@@ -96,7 +99,7 @@ export class Damage {
     k.cyl(0.015, 0.015, 0.12, 5, COL.iron, [bx + 0.06, 1.12, HAMMER_HOME.z], [0, 0, Math.PI / 2]);
     k.cyl(0.015, 0.015, 0.16, 5, COL.iron, [bx + 0.08, 1.12, BUCKET_HOME.z], [0, 0, Math.PI / 2]);
     const mesh = k.mesh(); S.root.add(mesh);
-    const water = new THREE.Mesh(new THREE.CircleGeometry(r - 0.03, 14).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x3f7fa0 }));
+    const water = new THREE.Mesh(new THREE.CircleGeometry(r - 0.01, 14).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x3f7fa0 }));
     water.position.set(x, h - 0.06, z); S.root.add(water);
     const signTex = canvasTex(1024, 300, (g, w, hh) => {
       g.fillStyle = '#e8d6a8'; g.fillRect(0, 0, w, hh);
@@ -127,7 +130,7 @@ export class Damage {
         else p.position.set(0, B - 0.15, M.z);
         this.S.root.add(p); planks.push(p);
       }
-      const tag = new THREE.Sprite(this.tags.mast); tag.scale.set(0.6, 0.3, 1); tag.position.set(0, 2.9, M.z); tag.visible = false; tag.renderOrder = 6;
+      const tag = new THREE.Sprite(this.tags.mast); tag.scale.set(0.9, 0.45, 1); tag.position.set(0, 3.1, M.z); tag.visible = false; tag.renderOrder = 6;
       this.S.root.add(tag);
       M.view = { splinters, planks, tag };
     }
@@ -146,7 +149,7 @@ export class Damage {
     _a.copy(p); this.S.root.worldToLocal(_a);
     if (Math.random() < 0.5) this.springLeak(_a);
     if (Math.random() < 0.2) this.startFire(_a.x * 0.6 + rand(-0.8, 0.8), _a.z + rand(-1, 1));
-    if (Math.random() < 0.1) {
+    if (Math.random() < 0.12) {
       const up = this.masts.filter((m) => !m.broken);
       if (up.length) this.snapMast(up[Math.floor(Math.random() * up.length)]);
     }
@@ -308,6 +311,10 @@ export class Damage {
   disposeView(v) {
     if (!v) return;
     v.group.parent?.remove(v.group);
+    v.group.traverse((o) => {
+      if (o.geometry && o.geometry !== FLAME_GEO && o.geometry !== SCORCH_GEO) o.geometry.dispose();
+      if (o === v.glow) o.material.dispose();
+    });
   }
 
   leakView(l) {
@@ -326,7 +333,7 @@ export class Damage {
     }
     const puddle = new THREE.Mesh(new THREE.CircleGeometry(0.55, 10).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x5a7f92, transparent: true, opacity: 0.55, depthWrite: false }));
     puddle.position.set(-s * 0.6, -l.y + 0.03, 0); puddle.scale.setScalar(0.1); g.add(puddle);
-    const tag = new THREE.Sprite(this.tags.leak); tag.scale.set(0.5, 0.25, 1); tag.position.set(-s * 0.35, 1.0, 0); tag.renderOrder = 6; g.add(tag);
+    const tag = new THREE.Sprite(this.tags.leak); tag.scale.set(0.8, 0.4, 1); tag.position.set(-s * 0.35, 1.0, 0); tag.renderOrder = 6; g.add(tag);
     g.position.set(l.x, l.y, l.z);
     this.S.root.add(g);
     return { group: g, planks, puddle, tag, sprayT: 0 };
@@ -342,10 +349,12 @@ export class Damage {
       fl.position.set(Math.cos(a) * r, 0.03, Math.sin(a) * r); fl.userData.ph = rand(0, 6); fl.userData.s = i === 0 ? 1.4 : rand(0.6, 1.1);
       g.add(fl); flames.push(fl);
     }
-    const tag = new THREE.Sprite(this.tags.fire); tag.scale.set(0.5, 0.25, 1); tag.position.y = 1.9; tag.renderOrder = 6; g.add(tag);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.G.fx.tex, color: 0xff7a20, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }));
+    glow.position.y = 0.35; g.add(glow);
+    const tag = new THREE.Sprite(this.tags.fire); tag.scale.set(0.8, 0.4, 1); tag.position.y = 1.9; tag.renderOrder = 6; g.add(tag);
     g.position.set(f.x, 0, f.z);
     this.S.root.add(g);
-    return { group: g, flames, tag, smokeT: 0, crackT: rand(0.2, 1), heat: 0 };
+    return { group: g, flames, glow, tag, smokeT: 0, crackT: rand(0.2, 1), heat: 0 };
   }
 
   view(dt) {
@@ -378,7 +387,8 @@ export class Damage {
         fl.scale.set(hs * (0.8 + 0.2 * fl2), hs * fl.userData.s * fl2, hs * (0.8 + 0.2 * fl2));
         fl.rotation.y = t * (1 + i * 0.3);
       });
-      v.flames[0].parent.children[0].scale.setScalar(0.6 + v.heat * 0.35); // scorch mark
+      v.group.children[0].scale.setScalar(0.6 + v.heat * 0.35); // scorch mark
+      v.glow.scale.setScalar((1 + v.heat * 0.8) * (0.9 + 0.1 * Math.sin(t * 13)));
       v.tag.position.y = 1.2 + v.heat * 0.5; tagOn(v.tag, f.x, f.z);
       v.smokeT -= dt;
       if (v.smokeT <= 0) {
