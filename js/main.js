@@ -9,9 +9,19 @@ import { Player } from './player.js';
 import { Crew } from './crew.js';
 import { Hud } from './hud.js';
 import { rand } from './util.js';
+import { Events } from './events.js';
+import { Ids } from './ids.js';
+import { applyAction, stepPlayers, hurtPlayer } from './actions.js';
+import { wirePresentation } from './presentation.js';
+import { snapshot } from './state.js';
 
 const params = new URLSearchParams(location.search);
 const G = window.G = { t: 0, score: 0, mode: null, debug: params.has('debug'), state: 'play', stateT: 0 };
+// Multiplayer groundwork. For now this headset is always the host (it runs the game rules)
+// and the only player. See docs/MULTIPLAYER.md for how friends will join later.
+G.isHost = true;
+G.events = new Events();
+G.ids = new Ids();
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -30,37 +40,48 @@ window.addEventListener('resize', () => {
 });
 
 G.world = makeWorld(scene);
-G.ship = new Ship(scene, { isPlayer: true, comfort: 0.45, health: 150, maxSpeed: 9.5, sail: 0.35, reloadTime: 5 });
+G.ship = new Ship(scene, { id: G.ids.next('ship'), isPlayer: true, comfort: 0.45, health: 150, maxSpeed: 9.5, sail: 0.35, reloadTime: 5 });
 G.ship.leverAngle = 0.6 - 1.2 * 0.35;
 G.fx = new Effects(scene);
 G.audio = new Sound();
 G.combat = new Combat(G);
 G.enemies = new Enemies(G);
-G.player = new Player(G);
+G.player = new Player(G);          // you, on this headset
+G.players = [G.player];             // everyone on board; friends get added here later
+G.items = G.player.items;           // muskets and cutlass on the rack (shared by the crew of players)
 G.crew = new Crew(G);
 G.hud = new Hud(G);
 G.player.setupVR(renderer);
 
+// ---------- Ids and actions ----------
+// Find anything by its id: ships, cannons, items, players.
+G.byId = (id) => {
+  for (const s of [G.ship, ...G.enemies.ships]) {
+    if (s.id === id) return s;
+    for (const c of s.cannons) if (c.id === id) return c;
+  }
+  return G.items.find((x) => x.id === id) || G.playerById(id) || G.enemies.boarders.find((b) => b.id === id) || null;
+};
+G.playerById = (id) => G.players.find((p) => p.id === id) || null;
+// Everything a player does goes through here (see actions.js).
+G.act = (a) => applyAction(G, { player: G.player.id, ...a });
+G.hurtPlayer = (pl, n) => hurtPlayer(G, pl, n);
+G.snapshot = () => snapshot(G);
+
 // ---------- Game events ----------
-G.onEnemySunk = (s) => {
-  G.score++;
-  G.hud.msg(G.score === 1 ? 'Enemy ship sunk! Huzzah!' : `Another one down! ${G.score} sunk`, 3.5);
-  G.crew.cheer(); G.audio.cheer();
-  for (const m of s.crew) if (!m.p.dead && Math.random() < 0.5) m.p.dead = true;
-};
-G.onPlayerDeath = () => {
-  G.hud.msg('You were cut down!', 3);
-  G.state = 'dead'; G.stateT = 3;
-};
+// Effects, sounds and messages for every event are in presentation.js.
+wirePresentation(G);
+// Rules that react to events:
+G.events.on('playerDied', () => { G.state = 'dead'; G.stateT = 3; });
 
 function resetGame() {
   const S = G.ship;
   G.enemies.clearAll();
   S.health = S.maxHealth; S.alive = true; S.sinkT = 0; S.speed = 0;
   S.wheelAngle = 0; S.leverAngle = 0.6 - 1.2 * 0.35;
-  G.player.respawn();
+  for (const pl of G.players) pl.respawn();
   G.score = 0; G.state = 'play';
-  G.hud.msg('A fresh ship and a fresh crew. Good luck, Captain.', 4);
+  G.events.emit('gameReset');
 }
 
 // ---------- Start screen ----------
@@ -138,7 +159,7 @@ function landCollisions(dt) {
       const push = Math.min(1.2, (h + 2.2) * 0.4 + 0.1);
       s.pos.x -= (_grad.x / g) * push; s.pos.z -= (_grad.z / g) * push;
       s.speed *= 0.92;
-      if (s === G.ship && s.speed > 0.8 && agroundMsgT <= 0) { agroundMsgT = 4; G.hud.msg('Ran aground! Steer back to open water', 2.5); }
+      if (s === G.ship && s.speed > 0.8 && agroundMsgT <= 0) { agroundMsgT = 4; G.events.emit('ranAground'); }
     }
   }
 }
@@ -160,12 +181,20 @@ function tick() {
   renderer.render(scene, camera);
 }
 
+// One frame of the whole game. Roughly in three parts:
+//   1. input: the local player's hands/keys become actions (G.act)
+//   2. rules: ships, enemies, crew, combat, health (in multiplayer only the host does this)
+//   3. view:  effects, messages, sound, the ocean (every headset does this)
 function simulate(dt) {
   G.t += dt;
   const t = G.t, S = G.ship, playing = !!G.mode;
 
-  if (playing) G.player.update(dt);
-  else { S.rudder = 0; S.sail = (0.6 - S.leverAngle) / 1.2; G.player.clampToDeck(); }
+  if (playing) {
+    G.player.update(dt);
+    S.applyHelm();
+    stepPlayers(G, dt);
+    G.player.updateView(dt);
+  } else { S.rudder = 0; S.sail = (0.6 - S.leverAngle) / 1.2; G.player.clampToDeck(); }
   S.update(dt, t);
 
   if (playing && G.started) {
@@ -177,14 +206,14 @@ function simulate(dt) {
 
     if (G.state === 'play' && !S.alive) {
       G.state = 'sinking'; G.stateT = 7;
-      G.hud.msg('We’re going down! Abandon ship!', 5);
+      G.events.emit('shipSinking');
     }
     if (G.state !== 'play') {
       G.stateT -= dt;
       if (G.state === 'dead' && G.stateT <= 0) {
         for (const b of G.enemies.boarders) G.enemies.killBoarder(b);
-        G.player.respawn(); G.state = S.alive ? 'play' : 'sinking'; G.stateT = 3;
-        G.hud.msg('The crew dragged you back to the helm', 3);
+        for (const pl of G.players) if (pl.dead) { pl.respawn(); G.events.emit('playerRevived', { player: pl }); }
+        G.state = S.alive ? 'play' : 'sinking'; G.stateT = 3;
       }
       if (G.state === 'sinking' && G.stateT <= 0) resetGame();
     }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { halfWidth, RACK } from './ship.js';
+import { halfWidth, RACK, WHEEL_MAX } from './ship.js';
 import { clamp, angleWrap, canvasTex } from './util.js';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _q = new THREE.Quaternion();
@@ -12,7 +12,6 @@ const BRASS = new THREE.MeshLambertMaterial({ color: 0xb8902f });
 const LEATHER = new THREE.MeshLambertMaterial({ color: 0x4a2e1a });
 const READY = new THREE.MeshBasicMaterial({ color: 0x40ff60 });
 const EMPTY = new THREE.MeshBasicMaterial({ color: 0xff3020 });
-const WHEEL_MAX = Math.PI * 2; // one full turn of the wheel = full rudder
 
 // Items are built so the hand holds the origin and the business end points down -Z.
 function buildMusket() {
@@ -73,9 +72,14 @@ const SWORD_TILT = 0.35; // extra upward tilt of the blade in the hand (radians)
 const _m = new THREE.Matrix4(), _q2 = new THREE.Quaternion();
 const MARK_MAT = new THREE.MeshBasicMaterial({ color: 0xffd25a, transparent: true, opacity: 0.55, depthTest: false, depthWrite: false });
 
+// The LOCAL player: reads the VR controllers or keyboard/mouse, moves the camera, and draws
+// your hands and held weapons. Anything that changes the game goes through G.act() (see
+// actions.js), so the same rules can later run on the host for friends' headsets too.
+// The fields id, headLocal, health, dead and lastHurt are this player's game state; a remote
+// friend will be a lighter object with the same fields (see docs/MULTIPLAYER.md).
 export class Player {
-  constructor(G) {
-    this.G = G;
+  constructor(G, id = 'player:0') {
+    this.G = G; this.id = id;
     const ship = G.ship;
     this.dolly = new THREE.Group(); ship.root.add(this.dolly);
     this.dolly.position.set(0, 0, 6.5);
@@ -92,7 +96,7 @@ export class Player {
     const homeQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
     const mk = (kind, dz) => {
       const it = kind === 'sword' ? buildSword() : buildMusket();
-      Object.assign(it, { kind, home: { pos: new THREE.Vector3(RACK.x + 0.02, 1.0, RACK.z + dz), quat: homeQ.clone() }, holder: null, returning: false,
+      Object.assign(it, { id: G.ids.next('item'), heldBy: null, kind, home: { pos: new THREE.Vector3(RACK.x + 0.02, 1.0, RACK.z + dz), quat: homeQ.clone() }, holder: null, returning: false,
         loaded: true, reloadT: 0, kick: 0, prevTip: new THREE.Vector3(), hasPrev: false, swooshCD: 0 });
       ship.root.add(it.obj); it.obj.position.copy(it.home.pos); it.obj.quaternion.copy(it.home.quat);
       return it;
@@ -209,6 +213,7 @@ export class Player {
     }
     if (t.kind === 'item') {
       const best = t.it;
+      if (!this.G.act({ type: 'takeItem', item: best.id })) return;
       h.held = best; best.holder = h; best.returning = false; best.hasPrev = false;
       if (best.kind === 'sword') {
         // Held like a real sword: blade comes up out of the top of the fist
@@ -229,9 +234,9 @@ export class Player {
 
   useCannon(h, c) {
     const G = this.G;
-    c.breech.getWorldPosition(_b);
-    if (G.ship.lightCannon(c, 0.35)) { G.audio.fuse(_b); this.haptic(h, 0.5, 60); this.cannonsFired = (this.cannonsFired || 0) + 1; G.crew.playerFired?.(); }
-    else if (c.reload > 0) { G.hud.msg('That cannon is still reloading', 1.5); G.audio.click(_b); }
+    const r = G.act({ type: 'lightCannon', cannon: c.id, delay: 0.35 });
+    if (r === 'lit') { this.haptic(h, 0.5, 60); this.cannonsFired = (this.cannonsFired || 0) + 1; }
+    else if (r === 'reloading') { G.hud.msg('That cannon is still reloading', 1.5); G.audio.click(c.breech.getWorldPosition(_b)); }
   }
 
   release(h) {
@@ -240,6 +245,7 @@ export class Player {
     if (it && typeof it === 'object') {
       if (it.support) { const o = it.support; it.support = null; o.supporting = null; o.held = null; }
       this.G.ship.root.attach(it.obj); it.holder = null; it.returning = true;
+      this.G.act({ type: 'dropItem', item: it.id });
     }
     h.held = null; h.glove.visible = true;
   }
@@ -277,19 +283,13 @@ export class Player {
     }
   }
 
+  // VR: the shot goes down the barrel. Desktop (h = null): it goes where the crosshair points.
   fireMusket(it, h) {
     const G = this.G;
-    if (!it.loaded) { it.muzzle.getWorldPosition(_a); G.audio.click(_a); return; }
-    it.loaded = false; it.reloadT = 1.8; it.kick = 1;
     it.muzzle.getWorldPosition(_a);
-    if (h) {
-      it.obj.getWorldQuaternion(_q); _b.set(0, 0, -1).applyQuaternion(_q);
-      G.combat.musketShot(_a, _b, _a);
-      this.haptic(h, 1, 90);
-    } else {
-      G.camera.getWorldPosition(_c); G.camera.getWorldDirection(_b);
-      G.combat.musketShot(_c, _b, _a);
-    }
+    if (h) { it.obj.getWorldQuaternion(_q); _b.set(0, 0, -1).applyQuaternion(_q); _c.copy(_a); }
+    else { G.camera.getWorldPosition(_c); G.camera.getWorldDirection(_b); }
+    if (G.act({ type: 'fireMusket', item: it.id, origin: _c, dir: _b, from: _a }) && h) this.haptic(h, 1, 90);
   }
 
   // Two hands on a musket: point the barrel from the trigger hand toward the steadying hand.
@@ -312,16 +312,14 @@ export class Player {
     const a = Math.atan2(_b.y, _b.x);
     const d = angleWrap(a - h.wheelPrev); h.wheelPrev = a;
     const nHands = this.hands.filter((x) => x.held === 'wheel').length;
-    const before = ship.wheelAngle;
-    ship.wheelAngle = clamp(ship.wheelAngle + d / nHands, -WHEEL_MAX, WHEEL_MAX);
-    h.tickAcc += Math.abs(ship.wheelAngle - before);
+    h.tickAcc += Math.abs(this.G.act({ type: 'steer', delta: d / nHands }));
     if (h.tickAcc > 0.35) { h.tickAcc = 0; this.haptic(h, 0.15, 12); }
   }
 
   updateLever(h) {
     const ship = this.G.ship;
     this.handPos(h, _b); ship.leverBase.worldToLocal(_b);
-    ship.leverAngle = clamp(Math.atan2(_b.z, _b.y), -0.6, 0.6);
+    this.G.act({ type: 'setSail', angle: Math.atan2(_b.z, _b.y) });
   }
 
   move(x, y, dt) {
@@ -405,7 +403,7 @@ export class Player {
       if (e.code === 'Digit1') this.equip('musket');
       if (e.code === 'Digit2') this.equip('sword');
       if (e.code === 'Digit3') this.equip(null);
-      if (e.code === 'Space') { e.preventDefault(); this.G.combat.broadside(); }
+      if (e.code === 'Space') { e.preventDefault(); if (!this.G.act({ type: 'broadside' })) this.G.hud.msg('No target in the cannons’ arc', 1.5); }
     });
     document.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
     canvas.addEventListener('mousedown', () => {
@@ -421,10 +419,13 @@ export class Player {
   }
 
   equip(kind) {
-    if (this.deskItem) { this.G.ship.root.attach(this.deskItem.obj); this.deskItem.returning = true; this.deskItem = null; }
+    if (this.deskItem) {
+      this.G.ship.root.attach(this.deskItem.obj); this.deskItem.returning = true;
+      this.G.act({ type: 'dropItem', item: this.deskItem.id }); this.deskItem = null;
+    }
     if (!kind) return;
-    const it = this.items.find((x) => x.kind === kind && !x.holder);
-    if (!it) return;
+    const it = this.items.find((x) => x.kind === kind && !x.holder && !x.heldBy);
+    if (!it || !this.G.act({ type: 'takeItem', item: it.id })) return;
     this.deskItem = it; it.returning = false;
     this.G.camera.add(it.obj);
     if (kind === 'musket') { it.obj.position.set(0.2, -0.2, -0.28); it.obj.rotation.set(0, 0, 0); }
@@ -440,8 +441,7 @@ export class Player {
       c.breech.getWorldPosition(_b); _b.sub(_a);
       const d = _b.length();
       if (d < 4 && _b.normalize().dot(_c) > 0.93) {
-        c.breech.getWorldPosition(_b);
-        if (G.ship.lightCannon(c, 0.35)) G.audio.fuse(_b); else if (c.reload > 0) G.hud.msg('That cannon is still reloading', 1.5);
+        if (G.act({ type: 'lightCannon', cannon: c.id, delay: 0.35 }) === 'reloading') G.hud.msg('That cannon is still reloading', 1.5);
         return;
       }
     }
@@ -458,29 +458,25 @@ export class Player {
       this.dolly.position.x += (fx * f + -fz * s) * sp;
       this.dolly.position.z += (fz * f + fx * s) * sp;
     }
-    if (k.KeyQ) ship.wheelAngle = clamp(ship.wheelAngle + dt * 4, -WHEEL_MAX, WHEEL_MAX);
-    if (k.KeyE) ship.wheelAngle = clamp(ship.wheelAngle - dt * 4, -WHEEL_MAX, WHEEL_MAX);
-    if (k.KeyR) ship.leverAngle = clamp(ship.leverAngle - dt * 0.6, -0.6, 0.6);
-    if (k.KeyF) ship.leverAngle = clamp(ship.leverAngle + dt * 0.6, -0.6, 0.6);
+    if (k.KeyQ) G.act({ type: 'steer', delta: dt * 4 });
+    if (k.KeyE) G.act({ type: 'steer', delta: -dt * 4 });
+    if (k.KeyR) G.act({ type: 'setSail', angle: ship.leverAngle - dt * 0.6 });
+    if (k.KeyF) G.act({ type: 'setSail', angle: ship.leverAngle + dt * 0.6 });
     if (this.swing >= 0 && this.deskItem) {
       this.swing += dt / 0.3;
       const u = Math.min(1, this.swing);
       this.deskItem.obj.rotation.set(0.7 - u * 1.9, 0.35 - u * 1.1, -u * 0.6);
-      if (u > 0.4 && !this.swingHit) { this.swingHit = true; G.combat.deskSwordHit(); }
+      if (u > 0.4 && !this.swingHit) {
+        this.swingHit = true;
+        // Look direction in ship-local space, flattened onto the deck
+        G.camera.getWorldDirection(_a); ship.root.getWorldQuaternion(_q).invert(); _a.applyQuaternion(_q); _a.y = 0; _a.normalize();
+        G.act({ type: 'deskSlash', facing: _a });
+      }
       if (this.swing >= 1) { this.swing = -1; this.deskItem.obj.rotation.set(0.7, 0.35, 0); }
     }
   }
 
   // ---------- Shared ----------
-  hurt(n) {
-    const G = this.G;
-    if (this.dead) return;
-    this.health -= n; this.lastHurt = G.t; this.hurtFlash = 1;
-    G.audio.hurt();
-    for (const h of this.hands) this.haptic(h, 0.9, 140);
-    if (this.health <= 0) { this.health = 0; this.dead = true; G.onPlayerDeath(); }
-  }
-
   respawn() {
     for (const h of this.hands) { this.release(h); h.evTrig = h.evSq = false; }
     this.dolly.position.set(0, 0, 6.5); this.dolly.rotation.set(0, 0, 0);
@@ -488,26 +484,24 @@ export class Player {
     this.health = 100; this.dead = false; this.hurtFlash = 0;
   }
 
+  // Read this frame's input (turned into actions) and keep the head on the deck.
   update(dt) {
-    const G = this.G, ship = G.ship;
+    const G = this.G;
     if (G.mode === 'vr') this.updateVR(dt); else if (G.mode === 'desktop') this.updateDesktop(dt);
     this.clampToDeck();
-    ship.rudder = clamp(-ship.wheelAngle / WHEEL_MAX, -1, 1);
-    ship.sail = (0.6 - ship.leverAngle) / 1.2;
+  }
 
-    if (!this.dead && G.t - this.lastHurt > 4 && this.health < 100) this.health = Math.min(100, this.health + 10 * dt);
+  // Everything you see of yourself: red hurt vignette, weapons in hand or floating back to
+  // the rack, musket ready gems. A VR sword is also checked against boarders here, since how
+  // fast you swing it is input.
+  updateView(dt) {
+    const G = this.G, ship = G.ship;
     this.hurtFlash = Math.max(0, this.hurtFlash - dt * 2.5);
     const op = this.dead ? 0.85 : this.hurtFlash * 0.45 + Math.max(0, 0.5 - this.health / 100) * 0.4;
     this.vignette.material.opacity = op; this.vignette.visible = op > 0.01;
 
     for (const it of this.items) {
-      if (it.kind === 'musket') {
-        if (!it.loaded) {
-          it.reloadT -= dt;
-          if (it.reloadT <= 0) { it.loaded = true; if (it.holder || this.deskItem === it) { it.obj.getWorldPosition(_a); G.audio.click(_a); } }
-        }
-        it.gem.material = it.loaded ? READY : EMPTY;
-      }
+      if (it.kind === 'musket') it.gem.material = it.loaded ? READY : EMPTY;
       it.kick = Math.max(0, it.kick - dt * 6);
       it.inner.rotation.x = it.kick * 0.3; it.inner.position.z = it.kick * 0.07;
       if (it.returning) {
@@ -522,7 +516,7 @@ export class Player {
         const tip = it.obj.localToWorld(_b.set(0, 0, -0.98)); ship.root.worldToLocal(tip);
         const speed = it.hasPrev ? tip.distanceTo(it.prevTip) / Math.max(dt, 1e-3) : 0;
         if (speed > 5.5 && it.swooshCD <= 0) { it.swooshCD = 0.35; it.obj.localToWorld(_c.set(0, 0, -0.6)); G.audio.swoosh(_c); }
-        if (G.combat.swordCheck(hilt, tip, speed)) this.haptic(it.holder, 1, 70);
+        if (G.act({ type: 'swordSweep', item: it.id, hilt, tip, speed })) this.haptic(it.holder, 1, 70);
         it.prevTip.copy(tip); it.hasPrev = true;
       } else it.hasPrev = false;
     }
