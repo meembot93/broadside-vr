@@ -1,51 +1,48 @@
 import * as THREE from 'three';
 import { halfWidth, RACK, WHEEL_MAX } from './ship.js';
 import { clamp, angleWrap, canvasTex } from './util.js';
+import { Kit, addCutlass, addMusket } from './kit.js';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _q = new THREE.Quaternion();
 const _seg = new THREE.Line3(), _p = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
-const WOOD = new THREE.MeshLambertMaterial({ color: 0x6b4426 });
-const IRONM = new THREE.MeshLambertMaterial({ color: 0x2b2d33 });
-const STEEL = new THREE.MeshLambertMaterial({ color: 0xc9ced8 });
-const BRASS = new THREE.MeshLambertMaterial({ color: 0xb8902f });
-const LEATHER = new THREE.MeshLambertMaterial({ color: 0x4a2e1a });
 const READY = new THREE.MeshBasicMaterial({ color: 0x40ff60 });
 const EMPTY = new THREE.MeshBasicMaterial({ color: 0xff3020 });
 
 // Items are built so the hand holds the origin and the business end points down -Z.
+// Each is one merged, flat-shaded mesh (see kit.js), styled after the reference art.
 function buildMusket() {
   const obj = new THREE.Group(), inner = new THREE.Group(); obj.add(inner);
-  const box = (w, h, d, m, x, y, z) => { const me = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); me.position.set(x, y, z); inner.add(me); return me; };
-  box(0.055, 0.13, 0.42, WOOD, 0, -0.045, 0.22);       // butt stock
-  box(0.05, 0.07, 0.2, WOOD, 0, -0.01, 0.02);          // wrist
-  box(0.055, 0.055, 0.78, WOOD, 0, 0.005, -0.44);      // fore stock
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.021, 1.12, 8).rotateX(Math.PI / 2), IRONM);
-  barrel.position.set(0, 0.035, -0.55); inner.add(barrel);
-  box(0.02, 0.05, 0.08, BRASS, 0.035, 0.02, 0.0);       // lock
-  box(0.012, 0.03, 0.05, IRONM, 0, -0.06, -0.02);       // trigger
-  const gem = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), READY); gem.position.set(0, 0.065, 0.06); inner.add(gem);
-  const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.035, -1.12); inner.add(muzzle);
+  const k = new Kit(); const [my, mz] = addMusket(k); inner.add(k.mesh());
+  const gem = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), READY); gem.position.set(0, 0.062, 0.1); inner.add(gem);
+  const muzzle = new THREE.Object3D(); muzzle.position.set(0, my, mz); inner.add(muzzle);
   return { obj, inner, gem, muzzle };
 }
 
 function buildSword() {
   const obj = new THREE.Group(), inner = new THREE.Group(); obj.add(inner);
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.042, 0.82), STEEL); blade.position.z = -0.53; inner.add(blade);
-  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.021, 0.08, 4).rotateX(-Math.PI / 2), STEEL); tip.scale.x = 0.3; tip.position.z = -0.98; inner.add(tip);
-  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.008, 5, 12, Math.PI), BRASS); guard.rotation.y = Math.PI / 2; guard.position.z = -0.1; inner.add(guard);
-  const cross = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.14, 0.02), BRASS); cross.position.z = -0.11; inner.add(cross);
-  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.14, 8).rotateX(Math.PI / 2), LEATHER); inner.add(grip);
-  const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), BRASS); pommel.position.z = 0.08; inner.add(pommel);
+  const k = new Kit(); addCutlass(k, 0.9); inner.add(k.mesh());
   return { obj, inner };
 }
 
+// A dark leather glove with a flared gauntlet cuff. The material is the glove's own so it
+// can glow a little when you squeeze or pull the trigger.
+const GLOVE = 0x2e2622, GLOVE_DARK = 0x221c19;
 function buildGlove() {
-  const g = new THREE.Group();
-  const palm = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.045, 0.1), LEATHER.clone()); palm.position.z = 0.01; g.add(palm);
-  g.userData.palm = palm;
-  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.08, 8).rotateX(Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0xd8cdb4 }));
-  cuff.position.z = 0.09; g.add(cuff);
+  const g = new THREE.Group(), k = new Kit();
+  k.box(0.078, 0.042, 0.095, GLOVE, [0, 0, 0.005]);                                  // back of hand
+  for (let i = 0; i < 4; i++) {                                                        // fingers, curled a little
+    const x = -0.027 + i * 0.018, len = i === 0 || i === 3 ? 0.045 : 0.052;
+    k.box(0.017, 0.022, len, GLOVE, [x, -0.008, -0.062], [-0.35, 0, 0]);
+    k.box(0.016, 0.02, 0.03, GLOVE, [x, -0.03, -0.092], [-1.2, 0, 0]);
+  }
+  k.cyl(0.047, 0.062, 0.1, 7, GLOVE_DARK, [0, 0.0, 0.1], [Math.PI / 2, 0, 0]);          // gauntlet
+  k.cyl(0.064, 0.064, 0.014, 7, 0x4a3a2c, [0, 0.0, 0.148], [Math.PI / 2, 0, 0]);        // cuff edge
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const palm = k.mesh(mat); g.add(palm);
+  const tk = new Kit(); tk.box(0.02, 0.022, 0.05, GLOVE, [0, 0, 0], [-0.3, 0.5, 0]);
+  const thumb = tk.mesh(mat); thumb.position.set(-0.045, -0.012, -0.025); g.add(thumb);
+  g.userData.palm = palm; g.userData.thumb = thumb;
   return g;
 }
 
@@ -129,7 +126,7 @@ export class Player {
       this.G.scene.add(mark, label);
       const h = { i, ctrl, grip, glove, mark, label, src: null, gp: null, side: '', trig: false, sq: false, evTrig: false, evSq: false,
         held: null, wheelPrev: 0, tickAcc: 0, hover: null, hoverKey: '' };
-      ctrl.addEventListener('connected', (e) => { h.src = e.data; h.gp = e.data.gamepad || null; h.side = e.data.handedness; this.checkHands(); });
+      ctrl.addEventListener('connected', (e) => { h.src = e.data; h.gp = e.data.gamepad || null; h.side = e.data.handedness; glove.userData.thumb.position.x = h.side === 'left' ? 0.045 : -0.045; this.checkHands(); });
       ctrl.addEventListener('disconnected', () => { this.release(h); h.src = null; h.gp = null; h.evTrig = h.evSq = false; });
       this.hands.push(h);
     }
@@ -373,7 +370,7 @@ export class Player {
       h.trig = trig; h.sq = sq;
       // Glove clenches and lights up so you can see the buttons are working
       h.glove.scale.set(1, sq ? 0.7 : 1, sq ? 0.8 : 1);
-      h.glove.userData.palm.material.color.setHex(trig ? 0xc87a3a : sq ? 0x7a5230 : 0x4a2e1a);
+      h.glove.userData.palm.material.emissive.setHex(trig ? 0x7a3a10 : sq ? 0x2e2010 : 0x000000);
       if (h.held && h.held.kind === 'musket') this.aimTwoHanded(h);
       if (h.held === 'wheel') this.updateWheel(h, dt);
       else if (h.held === 'lever') this.updateLever(h);
