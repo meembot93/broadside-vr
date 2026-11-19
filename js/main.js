@@ -17,6 +17,7 @@ import { applyAction, stepPlayers, hurtPlayer } from './actions.js';
 import { wirePresentation } from './presentation.js';
 import { wireVoices } from './voicelines.js';
 import { snapshot } from './state.js';
+import { Weather, CONDITIONS } from './weather.js';
 
 const params = new URLSearchParams(location.search);
 const G = window.G = { t: 0, score: 0, mode: null, debug: params.has('debug'), state: 'play', stateT: 0 };
@@ -57,6 +58,29 @@ G.crew = new Crew(G);
 G.grapples = new Grapples(G);
 G.hud = new Hud(G);
 G.player.setupVR(renderer);
+
+// Time of day and weather. Picked on the title screen (remembered), or ?weather=night|storm|stormNight|day|random.
+// Voyages can change it any time with G.weather.set(name).
+G.weather = new Weather(G);
+const WX_KEY = 'broadside.weather';
+let wxPick = params.get('weather');
+if (!wxPick) { try { wxPick = localStorage.getItem(WX_KEY); } catch (e) { /* private mode */ } }
+if (!CONDITIONS[wxPick] && wxPick !== 'random') wxPick = 'day';
+const randomWeather = () => { const k = Object.keys(CONDITIONS).filter((n) => n !== G.weather.name); return k[Math.floor(Math.random() * k.length)]; };
+const applyWeatherPick = () => G.weather.set(wxPick === 'random' ? randomWeather() : wxPick, { instant: true });
+applyWeatherPick();
+// "Surprise me": each new voyage sails into different weather, and a storm rolls in when the boss appears
+G.events.on('voyageWon', () => { if (wxPick === 'random') G.weather.set(randomWeather()); });
+G.events.on('bossArrived', () => { if (wxPick === 'random' && G.weather.target.storm < 1) G.weather.set(G.weather.target.night ? 'stormNight' : 'storm'); });
+for (const b of document.querySelectorAll('#weather button')) {
+  b.classList.toggle('on', b.dataset.wx === wxPick);
+  b.addEventListener('click', () => {
+    wxPick = b.dataset.wx;
+    try { localStorage.setItem(WX_KEY, wxPick); } catch (e) { /* private mode */ }
+    for (const o of document.querySelectorAll('#weather button')) o.classList.toggle('on', o === b);
+    applyWeatherPick();
+  });
+}
 
 // ---------- Ids and actions ----------
 // Find anything by its id: ships, cannons, items, players.
@@ -250,6 +274,7 @@ function simulate(dt) {
 
   G.grapples.view(dt);
   camera.getWorldPosition(_a);
+  G.weather.update(dt, t, _a);
   G.world.update(t, S.pos, _a);
   G.fx.update(dt);
   G.hud.update(dt);
