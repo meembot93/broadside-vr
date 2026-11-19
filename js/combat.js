@@ -92,6 +92,7 @@ export class Combat {
         if (s.containsWorld(p)) {
           const dmg = b.owner.isPlayer ? 14 : 5;
           s.damage(dmg);
+          if (s === G.ship) G.damage.onHit(p); // leaks, fires, a snapped mast (damage.js)
           // Splinters: sailors close to where it hit may go down (not behind the helm shelter)
           if (s !== G.ship) {
             _a.copy(p); s.root.worldToLocal(_a);

@@ -124,6 +124,28 @@ export class Sound {
     if (!this.ctx) return; const o = this.out(null, 0.4);
     for (let i = 0; i < 4; i++) this.noise(o, { type: 'bandpass', f: 600 + i * 150, f2: 900 + i * 120, q: 4, peak: 0.3, a: 0.08, d: 0.6, t0: i * 0.07 });
   }
+  // Repairs
+  knock(pos) { // hammer on a plank
+    if (!this.ctx) return; const o = this.out(pos, 1.1);
+    this.tone(o, { type: 'triangle', f: 420, f2: 180, peak: 0.6, a: 0.001, d: 0.09 });
+    this.noise(o, { type: 'bandpass', f: 2200, q: 1.5, peak: 0.6, a: 0.001, d: 0.06 });
+    this.noise(o, { f: 900, peak: 0.4, a: 0.001, d: 0.12 });
+  }
+  crack(pos) { // a mast snapping
+    if (!this.ctx) return; const o = this.out(pos, 1.6);
+    for (let i = 0; i < 5; i++) this.noise(o, { type: 'bandpass', f: 900 + i * 300, q: 2, peak: 0.6, a: 0.001, d: 0.08, t0: i * 0.045 });
+    this.noise(o, { f: 500, f2: 80, peak: 0.9, a: 0.01, d: 1.4, t0: 0.2 });
+    this.tone(o, { type: 'sawtooth', f: 70, f2: 40, peak: 0.3, a: 0.05, d: 1.2, t0: 0.2 });
+  }
+  crackle(pos, vol = 0.5) { // fire
+    if (!this.ctx) return; const o = this.out(pos, vol);
+    this.noise(o, { type: 'highpass', f: 2500 + Math.random() * 2000, peak: 0.5, a: 0.001, d: 0.03 });
+    this.noise(o, { type: 'bandpass', f: 400, q: 0.8, peak: 0.25, a: 0.05, d: 0.3 });
+  }
+  hiss(pos) { // water on fire
+    if (!this.ctx) return; const o = this.out(pos, 0.9);
+    this.noise(o, { type: 'highpass', f: 3500, f2: 6000, peak: 0.6, a: 0.02, d: 1.1 });
+  }
   creak(pos) {
     if (!this.ctx) return; const o = this.out(pos, 0.25);
     this.tone(o, { type: 'sawtooth', f: 95 + Math.random() * 40, f2: 70, peak: 0.12, a: 0.15, d: 0.6 });

@@ -24,12 +24,14 @@ const LAMP_FUSE = new THREE.MeshBasicMaterial({ color: 0xffc020 });
 export const RACK = { x: -2.2, z: 5.6 };
 // Cannons: along-ship positions, how high their platform lifts them (barrel axis ends up ~1.07 m,
 // about 3.5 ft), and the gun port cut into the bulwark so the barrel clears the rail.
-const CANNON_Z = [-3, 1], GUN_LIFT = 0.45, PORT_HALF = 0.55, PORT_SILL = 0.68;
+export const CANNON_Z = [-3, 1]; const GUN_LIFT = 0.45, PORT_HALF = 0.55, PORT_SILL = 0.68;
 const G_ACC = 9.81;
 // Where an enemy's helmsman shelters (ship-local): front wall at z0, side walls to z1, top height.
 export const HELM_COVER = { x: 1.0, z0: 4.95, z1: 6.9, top: 1.58 };
 // Where whoever steers stands, just behind the wheel.
 export const HELM_SPOT = { x: 0, z: 6.3 };
+// Our ship's masts can snap here (ship-local height): everything above leans over as one piece.
+export const MAST_BREAK_Y = 2.3;
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
 const _s = new THREE.Vector3(), _m = new THREE.Matrix4();
@@ -91,6 +93,7 @@ export class Ship {
     this.pos = new THREE.Vector3(o.x || 0, 0, o.z || 0);
     this.heading = o.heading || 0;
     this.speed = 0; this.sail = o.sail ?? 0.5; this.rudder = 0;
+    this.speedMul = 1; // below 1 when holed or dismasted (see damage.js)
     this.maxSpeed = o.maxSpeed || 9; this.turnRate = o.turnRate || 0.24;
     this.maxHealth = this.health = o.health || 100;
     this.alive = true; this.sinkT = 0; this.sinkTilt = Math.random() < 0.5 ? 1 : -1;
@@ -214,19 +217,34 @@ export class Ship {
     const MIZZEN = { z: 3.3, h: 11, r: 0.19, sails: [{ y: 9.8, w: 4.4, h: 3.0 }, { y: 6.6, w: 5.4, h: 3.6 }] };
     const masts = this.kind === 'sloop' ? [{ ...MAIN, h: 16, sails: [{ y: 14.4, w: 6.4, h: 4.6 }, { y: 9.6, w: 8.2, h: 6.4 }] }]
       : this.kind === 'galleon' ? [MAIN, FORE, MIZZEN] : [MAIN, FORE];
-    this.mastList = masts;
-    for (const m of masts) {
-      add(new THREE.CylinderGeometry(m.r * 0.65, m.r, m.h, 8), wood, 0, m.h / 2 - 0.5, m.z);
+    this.mastList = masts.map((m) => ({ ...m }));
+    // Our own ship: the part of each mast above MAST_BREAK_Y is its own group, so it can snap
+    // and lean over (damage.js). Enemy masts stay merged into the hull (cheaper to draw).
+    const B = MAST_BREAK_Y;
+    for (const m of this.mastList) {
+      let put = add;
+      if (this.isPlayer) {
+        const grp = new THREE.Group(); grp.position.set(0, B, m.z); this.root.add(grp); m.group = grp;
+        put = (geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
+          const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x, y - B, z - m.z); mesh.rotation.set(rx, ry, rz); grp.add(mesh);
+          this.geos.push(geo);
+        };
+        const rB = m.r + (m.r * 0.65 - m.r) * ((B + 0.5) / m.h);
+        add(new THREE.CylinderGeometry(rB, m.r, B + 0.5, 8), wood, 0, (B - 0.5) / 2, m.z);
+        put(new THREE.CylinderGeometry(m.r * 0.65, rB, m.h - 0.5 - B, 8), wood, 0, (m.h - 0.5 + B) / 2, m.z);
+      } else add(new THREE.CylinderGeometry(m.r * 0.65, m.r, m.h, 8), wood, 0, m.h / 2 - 0.5, m.z);
       for (const s of m.sails) {
-        add(new THREE.CylinderGeometry(0.08, 0.08, s.w + 0.6, 6), dark, 0, s.y, m.z - 0.25, 0, 0, Math.PI / 2);
-        add(new THREE.CylinderGeometry(0.15, 0.15, s.w * 0.92, 6), sailMat, 0, s.y - 0.1, m.z - 0.33, 0, 0, Math.PI / 2);
+        put(new THREE.CylinderGeometry(0.08, 0.08, s.w + 0.6, 6), dark, 0, s.y, m.z - 0.25, 0, 0, Math.PI / 2);
+        put(new THREE.CylinderGeometry(0.15, 0.15, s.w * 0.92, 6), sailMat, 0, s.y - 0.1, m.z - 0.33, 0, 0, Math.PI / 2);
         const sm = this.makeSail(s.w, s.h, sailMat);
         sm.position.set(0, s.y - 0.05, m.z - 0.38);
-        this.root.add(sm);
+        if (m.group) { sm.position.y -= B; sm.position.z -= m.z; m.group.add(sm); } else this.root.add(sm);
+      }
+      if (m.z === -1) { // crow's nest on the main mast
+        put(new THREE.CylinderGeometry(0.72, 0.58, 0.55, 10, 1, true), wood, 0, 10.4, -1);
+        put(new THREE.CylinderGeometry(0.72, 0.72, 0.06, 10), dark, 0, 10.15, -1);
       }
     }
-    add(new THREE.CylinderGeometry(0.72, 0.58, 0.55, 10, 1, true), wood, 0, 10.4, -1);
-    add(new THREE.CylinderGeometry(0.72, 0.72, 0.06, 10), dark, 0, 10.15, -1);
     add(new THREE.CylinderGeometry(0.1, 0.17, 5.2, 7), wood, 0, 1.45, -11.85, -70 * Math.PI / 180, 0, 0);
 
     // Cannon carriages (barrels are separate, they move)
@@ -293,11 +311,22 @@ export class Ship {
     const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lines, 3));
     const rig = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x2a2018 }));
     this.root.add(rig); this.geos.push(lg);
+    // Rope ends tied to a mast above the break follow that mast when it leans (see updateRig)
+    if (this.isPlayer) {
+      this.rigGeo = lg; this.rigBase = Float32Array.from(lines);
+      this.rigOwner = [];
+      for (let i = 0; i < lines.length / 3; i++) {
+        const y = lines[i * 3 + 1], z = lines[i * 3 + 2];
+        this.rigOwner.push(y > B + 0.5 ? this.mastList.find((m) => Math.abs(m.z - z) < 0.01) || null : null);
+      }
+    }
 
     // Flag
     const fgeo = new THREE.PlaneGeometry(1.9, 1.15, 10, 1).translate(0.95, 0, 0).rotateY(-Math.PI / 2);
     this.flag = new THREE.Mesh(fgeo, new THREE.MeshLambertMaterial({ map: flagTex(enemy ? 'red' : 'jolly'), side: THREE.DoubleSide }));
     this.flag.position.set(0, 14.6, -1); this.root.add(this.flag);
+    const mainGrp = this.mastList.find((m) => m.z === -1)?.group;
+    if (mainGrp) { mainGrp.add(this.flag); this.flag.position.set(0, 14.6 - B, 0); }
     this.flagBase = Float32Array.from(fgeo.attributes.position.array);
 
     // Merge static parts per material
@@ -396,7 +425,7 @@ export class Ship {
 
   step(dt) {
     if (this.alive) {
-      this.speed = damp(this.speed, this.sail * this.maxSpeed, 0.35, dt);
+      this.speed = damp(this.speed, this.sail * this.maxSpeed * this.speedMul, 0.35, dt);
       this.heading -= this.rudder * this.turnRate * (0.3 + 0.7 * (this.speed / this.maxSpeed)) * dt;
     } else {
       this.sinkT += dt;
@@ -468,6 +497,18 @@ export class Ship {
       c.recoil = Math.max(0, c.recoil - dt * 1.6);
       c.barrel.position.z = Math.sin(Math.min(1, c.recoil) * Math.PI * 0.5) * 0.4;
     }
+  }
+
+  // Move the rope ends that hang from a leaning mast (our ship only).
+  updateRig() {
+    if (!this.rigGeo) return;
+    const pa = this.rigGeo.attributes.position, b = this.rigBase;
+    for (let i = 0; i < this.rigOwner.length; i++) {
+      const m = this.rigOwner[i]; if (!m) continue;
+      _v.set(b[i * 3], b[i * 3 + 1] - m.group.position.y, b[i * 3 + 2] - m.group.position.z).applyMatrix4(m.group.matrix);
+      pa.setXYZ(i, _v.x, _v.y, _v.z);
+    }
+    pa.needsUpdate = true;
   }
 
   containsLocal(l, pad = 0.15) {
