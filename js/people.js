@@ -122,7 +122,11 @@ function hairChain(k, color, pts, r0, r1) {
 
 function buildHead(k, c, R) {
   const skin = c.skin, hair = c.hair;
-  k.ball(0.125, 1, skin, [0, 0, 0], 0, c.female ? [0.9, 1.08, 0.98] : [0.94, 1.1, 1.0]);
+  const face = k.ball(0.125, 2, skin, [0, 0, 0], 0, c.female ? [0.9, 1.04, 0.98] : [0.94, 1.1, 1.0]);
+  { // brighten the underside a little (fake bounce light) so a bare chin doesn't read as a beard
+    const p = face.attributes.position, col = face.attributes.color;
+    for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (y < 0) { const f = 1 + Math.min(0.7, -y * 6); col.setXYZ(i, col.getX(i) * f, col.getY(i) * f, col.getZ(i) * f); } }
+  }
   const nose = c.female ? [0.022, 0.05] : [0.03, 0.075];
   k.add(new THREE.ConeGeometry(nose[0], nose[1], 4).rotateX(-Math.PI / 2), vary(skin, 0.06, R), [0, -0.015, -0.128], [0, 0, Math.PI / 4], [1, 1.3, 1]);
   k.box(0.034, 0.05, 0.03, skin, [-0.115, 0, 0.0]); k.box(0.034, 0.05, 0.03, skin, [0.115, 0, 0.0]);  // ears
