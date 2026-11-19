@@ -34,3 +34,10 @@ Your crew only fires a cannon now and then, so the fighting is up to you.
   game state as plain data.
 - See [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md) for the plan to add friends.
 
+
+## Version number (please keep it up to date)
+
+`js/version.js` holds the version shown at the top of the title screen and on the
+Captain's Board, plus a few words on the latest changes. **Every change merged to main must
+bump `VERSION` by 1 and update `CHANGES`**, so Meem can tell whether the headset has the
+newest build.
