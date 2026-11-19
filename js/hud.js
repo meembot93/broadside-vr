@@ -25,6 +25,84 @@ export class Hud {
     G.ship.root.add(this.msgMesh);
     this.queue = []; this.cur = null; this.curT = 0; this.placed = false;
     this.dom = document.getElementById('dhud');
+
+    // Health bars locked to your view, top left: one row per player on board (yours first)
+    this.vitalsTex = canvasTex(512, 256, () => {});
+    this.vitals = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.16),
+      new THREE.MeshBasicMaterial({ map: this.vitalsTex, transparent: true, depthTest: false, depthWrite: false }));
+    this.vitals.renderOrder = 997; G.camera.add(this.vitals);
+    this.vitalsKey = '';
+
+    // A hull bar floating over each enemy ship
+    this.enemyBars = new Map(); // ship -> { sprite, tex, shown }
+  }
+
+  // Your health (and, in co-op, your friends') pinned to the top left of your view
+  drawVitals() {
+    const G = this.G, list = [G.player, ...G.players.filter((p) => p !== G.player)].slice(0, 4);
+    const key = list.map((p) => `${p.id}:${Math.ceil(p.health)}:${p.dead}`).join('|');
+    if (key === this.vitalsKey) return;
+    this.vitalsKey = key;
+    const g = this.vitalsTex.userData.ctx;
+    g.clearRect(0, 0, 512, 256);
+    list.forEach((p, i) => {
+      const y = i * 62 + 4, v = Math.max(0, Math.min(1, p.health / 100));
+      g.fillStyle = 'rgba(20,12,6,0.6)'; g.beginPath(); g.roundRect(0, y, 512, 56, 14); g.fill();
+      g.fillStyle = '#f6e7c1'; g.font = 'bold 30px Georgia, serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
+      g.fillText(p === G.player ? 'You' : `Mate ${i}`, 14, y + 29);
+      g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillRect(120, y + 12, 300, 32);
+      g.fillStyle = p.dead ? '#555' : v > 0.35 ? '#c0392b' : '#ff5a2a'; g.fillRect(120, y + 12, 300 * v, 32);
+      g.strokeStyle = '#c9a75b'; g.lineWidth = 3; g.strokeRect(120, y + 12, 300, 32);
+      g.fillStyle = '#f6e7c1'; g.font = 'bold 28px Georgia, serif'; g.textAlign = 'right';
+      g.fillText(p.dead ? 'down' : String(Math.ceil(p.health)), 500, y + 29);
+    });
+    this.vitalsTex.needsUpdate = true;
+  }
+
+  placeVitals() {
+    const G = this.G, m = this.vitals, d = 0.8;
+    if (G.mode !== 'vr') {
+      // Flat screen: tuck it into the actual top-left corner of the window
+      const hh = d * Math.tan((G.camera.fov * Math.PI) / 360), hw = hh * G.camera.aspect;
+      m.position.set(-hw + 0.17, hh - 0.08, -d);
+    } else m.position.set(-0.3, 0.2, -d); // VR: up and left of centre, easy to glance at
+  }
+
+  enemyBar(e) {
+    let b = this.enemyBars.get(e);
+    if (!b) {
+      const tex = canvasTex(256, 40, () => {});
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+      sprite.position.set(0, 17.2, -1); sprite.renderOrder = 5;
+      e.root.add(sprite);
+      b = { sprite, tex, shown: -1 };
+      this.enemyBars.set(e, b);
+    }
+    return b;
+  }
+
+  updateEnemyBars() {
+    const G = this.G;
+    for (const [e, b] of this.enemyBars) if (!G.enemies.ships.includes(e)) { b.sprite.removeFromParent(); b.tex.dispose(); b.sprite.material.dispose(); this.enemyBars.delete(e); }
+    G.camera.getWorldPosition(_a);
+    for (const e of G.enemies.ships) {
+      const b = this.enemyBar(e);
+      b.sprite.visible = e.alive;
+      if (!e.alive) continue;
+      const v = Math.max(0, Math.min(1, e.health / e.maxHealth));
+      if (Math.abs(v - b.shown) > 0.004) {
+        b.shown = v;
+        const g = b.tex.userData.ctx;
+        g.clearRect(0, 0, 256, 40);
+        g.fillStyle = 'rgba(20,12,6,0.75)'; g.fillRect(0, 0, 256, 40);
+        g.fillStyle = v > 0.35 ? '#c0392b' : '#ff7a2a'; g.fillRect(6, 6, 244 * v, 28);
+        g.strokeStyle = '#e8c77a'; g.lineWidth = 4; g.strokeRect(2, 2, 252, 36);
+        b.tex.needsUpdate = true;
+      }
+      // Grow with distance so it stays readable far away
+      const w = Math.max(6, e.root.position.distanceTo(_a) * 0.075);
+      b.sprite.scale.set(w, w * 40 / 256, 1);
+    }
   }
 
   msg(text, dur = 3.5) {
@@ -88,6 +166,8 @@ export class Hud {
     const G = this.G;
     this.boardT -= dt;
     if (this.boardT <= 0) { this.boardT = 0.25; this.drawBoard(); this.updateDom(); }
+    this.drawVitals(); this.placeVitals(); this.vitals.visible = !!G.mode;
+    this.updateEnemyBars();
 
     if (!this.cur && this.queue.length) { this.cur = this.queue.shift(); this.curT = this.cur.dur; this.drawMsg(this.cur.text); this.placed = false; }
     if (this.cur) {

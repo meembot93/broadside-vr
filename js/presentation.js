@@ -63,6 +63,22 @@ export function wirePresentation(G) {
     else hud.msg('More boarders!', 2);
   });
   on('boarderSwing', ({ pos }) => audio.swoosh(pos));
+  on('enemyCrewKilled', ({ role, left }) => {
+    if (left === 0) return;
+    if (role === 'helm') hud.msg('Their helmsman is down! She’s steering wild', 3);
+    else if (left <= 2) hud.msg(`Only ${left} of their crew left standing`, 2.5);
+  });
+  on('enemyHelmTaken', () => hud.msg('Another of theirs is running for the wheel', 2.5));
+  on('enemyAbandoned', () => { hud.msg('Their whole crew is down! She’s drifting', 4); G.crew.cheer(); audio.cheer(); });
+
+  // ---- Our helm and crew ----
+  const ORDER_SAY = { hold: 'Holding this course', chase: 'Engaging the enemy', alongside: 'Bringing us alongside', heave: 'Heaving to, sails furled' };
+  on('helmTaken', ({ name, order }) => hud.msg(`${name} has the wheel: ${ORDER_SAY[order]}`, 3.5));
+  on('helmHandedBack', ({ name }) => hud.msg(`${name}: She’s yours, Captain`, 2.5));
+  on('helmOrder', ({ order, helmsmanSteering, name }) => {
+    hud.msg(`Order: ${ORDER_SAY[order]}!`, 2.5);
+    if (!helmsmanSteering) hud.msg(`${name} will do it when you leave the wheel`, 3);
+  });
   on('deckCleared', () => hud.msg('Deck cleared!', 2));
 
   // ---- Players ----

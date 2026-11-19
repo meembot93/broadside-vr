@@ -1,14 +1,18 @@
 import * as THREE from 'three';
-import { Ship, halfWidth } from './ship.js';
+import { Ship, halfWidth, HELM_SPOT } from './ship.js';
 import { makePerson, animatePerson, facePerson } from './people.js';
-import { clamp, angleWrap, rand } from './util.js';
+import { clamp, angleWrap, rand, damp } from './util.js';
 
-const _a = new THREE.Vector3();
+const _a = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
+// Enemy pirates, one look per job (helm, gunner, gunner, rigger, mate): a captain in a dark
+// coat at the wheel, the rest in darker, grubbier clothes than our own crew. See people.js.
 const LOOKS = [
-  { shirt: 0x2a2a2a, pants: 0x5a1a1a, bandana: 0x111111, cutlass: true, beard: 0x1a1a1a },
-  { shirt: 0x7a1d1d, pants: 0x2a2a2a, hat: 0x111111, cutlass: true },
-  { shirt: 0x4a4038, pants: 0x1e1e2a, bandana: 0x7a1d1d, cutlass: true, skin: 0x8d5a3b },
-  { shirt: 0x5a5a3a, pants: 0x3a2a1a, hat: 0x2a1a10, cutlass: true, beard: 0x5a3a1a },
+  { type: 'captain', coat: 0x2a1e1e, hat: 0x5a1a1a, cutlass: true },
+  { type: 'gunner', bandana: 0x1e1e1e, pants: 0x3a1a1a, cutlass: true },
+  { type: 'gunner', bandana: 0x7a1d1d, pants: 0x1e1e2a, cutlass: true },
+  { type: 'deckhand', bandana: 0x3a3a3a, vest: 0x3a3430, cutlass: true },
+  { type: 'sailor', vest: 0x2a2a2a, hat: 0x1e1814, cutlass: true },
+  { type: 'swashbuckler', vest: 0x3a2a20, sash: 0x1e1e1e, cutlass: true },
 ];
 
 export class Enemies {
@@ -31,12 +35,15 @@ export class Enemies {
     const heading = Math.atan2(-(P.pos.x - x), -(P.pos.z - z));
     const s = new Ship(G.scene, { id: G.ids.next('ship'), x, z, heading, maxSpeed: 7.6, turnRate: 0.22, health: 100, sail: 1, reloadTime: 9 });
     s.ai = { canBoard: this.ships.length === 0 && G.score === 0 ? true : Math.random() < 0.6, mode: 'approach', inRangeT: 0, boardT: 3, sent: 0 };
-    const spots = [[-1.3, -2.2], [1.4, -3.6], [0.9, 2.6], [-0.8, -5.2], [-1.2, 3.4]];
-    for (let i = 0; i < 4; i++) {
+    s.driftRudder = rand(-0.3, 0.3);
+    // Every job on an enemy ship needs a living sailor: no helmsman, no steering; no gunner
+    // at a cannon, no shot. Kill them all and the ship drifts.
+    const roles = [['helm', 0, HELM_SPOT.x, HELM_SPOT.z], ['gunner', -1, -1.3, -1], ['gunner', 1, 1.3, -1], ['rigger', 0, 0.9, -2.6], ['mate', 0, -0.9, 2.8]];
+    roles.forEach(([role, side, x, z], i) => {
       const p = makePerson(LOOKS[i % LOOKS.length]);
-      p.g.position.set(spots[i][0], 0, spots[i][1]); s.root.add(p.g);
-      s.crew.push({ id: `${s.id}/crew:${i}`, p });
-    }
+      p.g.position.set(x, 0, z); s.root.add(p.g);
+      s.crew.push({ id: `${s.id}/crew:${i}`, p, role, side, hp: 2, cannon: null, aimT: 0, hitCD: 0, atkCD: rand(0.6, 1.2), swingHit: true, workT: 0 });
+    });
     this.ships.push(s);
     G.events.emit('enemySpawned', { ship: s, count: this.ships.length });
   }
@@ -54,8 +61,15 @@ export class Enemies {
     e.rudder = clamp(angleWrap(e.heading - desired) * 1.6, -1, 1);
   }
 
+  // Who is standing at the wheel right now (null if nobody).
+  helmsman(e) {
+    return e.crew.find((m) => !m.p.dead && m.role === 'helm' && Math.hypot(m.p.g.position.x - HELM_SPOT.x, m.p.g.position.z - HELM_SPOT.z) < 0.45) || null;
+  }
+
   ai(e, dt) {
     const G = this.G, P = G.ship, A = e.ai;
+    if (e.abandoned) { this.drift(e, dt); return; }
+    const helm = this.helmsman(e), sail0 = e.sail, rudder0 = e.rudder;
     const dx = P.pos.x - e.pos.x, dz = P.pos.z - e.pos.z, dist = Math.hypot(dx, dz);
     const bearing = Math.atan2(-dx, -dz);
     if (dist < 100) A.inRangeT += dt;
@@ -79,14 +93,15 @@ export class Enemies {
       this.steer(e, desired);
       e.sail = A.mode === 'board' ? (dist < 25 ? clamp(P.speed / e.maxSpeed + 0.1, 0.3, 1) : 1) : 0.65;
     }
+    // Nobody at the wheel: the rudder swings loose and she wanders; the sails stay as they were
+    if (!helm) { e.sail = sail0; e.rudder = damp(rudder0, e.driftRudder, 0.8, dt); }
     // Don't ram straight through us
     if (dist < 12) { const k = (12 - dist) * dt * 1.5 / Math.max(dist, 0.1); e.pos.x -= dx * k; e.pos.z -= dz * k; }
 
-    // Cannons
+    // Cannons: aimed here, but only fired by a gunner standing at the breech (see updateCrew)
     for (const c of e.cannons) {
-      c.inArc = e.aimCannon(c, P, 0.03);
+      c.inArc = P.alive && e.aimCannon(c, P, 0.03);
       if (!c.inArc) { c.tElev = 0.05; c.tYaw = 0; }
-      else if (e.cannonReady(c) && P.alive && Math.random() < dt * 1.5) e.lightCannon(c, rand(0.2, 0.7));
     }
 
     // Boarding (only while someone is alive on deck to fight them)
@@ -97,12 +112,109 @@ export class Enemies {
     }
   }
 
+  // A ship with nobody left aboard: loose rudder, sails slowly spilling their wind.
+  drift(e, dt) {
+    e.rudder = damp(e.rudder, e.driftRudder, 0.5, dt);
+    e.sail = damp(e.sail, 0.08, 0.15, dt);
+    for (const c of e.cannons) { c.inArc = false; c.tElev = -0.05; c.tYaw = 0; }
+  }
+
+  // One of an enemy ship's own crew is killed (musket, cannonball or sword).
+  killCrew(e, m, cause) {
+    if (m.p.dead) return;
+    m.p.dead = true; m.p.deadT = 0; m.p.pose = null;
+    const left = e.crew.filter((x) => !x.p.dead).length;
+    this.G.events.emit('enemyCrewKilled', { ship: e, role: m.role, left, cause });
+    if (left === 0 && e.alive && !e.abandoned) {
+      e.abandoned = true; e.ai.mode = 'adrift';
+      this.G.events.emit('enemyAbandoned', { ship: e });
+    }
+  }
+
+  // Walk a deck-hand toward (tx, tz) on its own ship. Returns true once there.
+  walk(m, tx, tz, dt, speed = 1.9) {
+    const pos = m.p.g.position, dx = tx - pos.x, dz = tz - pos.z, d = Math.hypot(dx, dz);
+    if (d < 0.12) return true;
+    const k = Math.min(d, speed * dt) / d; pos.x += dx * k; pos.z += dz * k;
+    facePerson(m.p, dx, dz, dt);
+    // Step around the masts
+    for (const mz of [-1, -6.5]) {
+      const ox = pos.x, oz = pos.z - mz, od = Math.hypot(ox, oz);
+      if (od < 0.55) { const s = od > 1e-4 ? 0.55 / od : 1; pos.x = (ox * s) || 0.55; pos.z = mz + oz * s; }
+    }
+    const zc = clamp(pos.z, -8.4, 6.9), hw = halfWidth(zc) - 0.45; pos.z = zc; pos.x = clamp(pos.x, -hw, hw);
+    return false;
+  }
+
+  // Hand out the jobs that matter: the wheel first, then a gunner for each side.
+  // Called whenever someone aboard dies.
+  assignRoles(e) {
+    const live = e.crew.filter((m) => !m.p.dead);
+    if (!live.length) return;
+    const spare = () => live.filter((m) => m.role === 'mate' || m.role === 'rigger').sort((a, b) => (a.role === 'mate' ? -1 : 1))[0]
+      || live.filter((m) => m.role === 'gunner')[0];
+    if (!live.some((m) => m.role === 'helm')) { const m = spare(); if (m) { m.role = 'helm'; m.cannon = null; this.G.events.emit('enemyHelmTaken', { ship: e }); } }
+    const gunners = live.filter((m) => m.role === 'gunner');
+    for (const side of [-1, 1]) {
+      if (gunners.some((g) => g.side === side)) continue;
+      const m = live.find((x) => x.role === 'mate' || x.role === 'rigger');
+      if (m) { m.role = 'gunner'; m.side = side; gunners.push(m); }
+    }
+    // A lone gunner works both sides
+    if (gunners.length === 1) gunners[0].side = 0;
+  }
+
+  // Enemy deck crew: walk to their jobs and do them.
+  updateCrew(e, dt, t, k) {
+    const G = this.G, P = G.ship;
+    let dead = false;
+    for (const m of e.crew) if (m.p.dead && !m.counted) { m.counted = true; dead = true; }
+    if (dead) this.assignRoles(e);
+    for (const m of e.crew) {
+      const p = m.p, pos = p.g.position;
+      if (p.dead) { animatePerson(p, dt, false, t + k); continue; }
+      let moving = false; p.pose = null;
+      m.hitCD -= dt;
+      if (!e.alive) { animatePerson(p, dt, false, t + k); continue; }
+      if (m.role === 'helm') {
+        if (this.walk(m, HELM_SPOT.x, HELM_SPOT.z, dt)) { facePerson(p, 0, -1, dt, 4); p.pose = 'steer'; } else moving = true;
+      } else if (m.role === 'gunner') {
+        // Go to the best cannon on my side: loaded and with a target first, otherwise one to reload
+        let best = null, bs = 1e9;
+        for (const c of e.cannons) {
+          if (m.side && c.side !== m.side) continue;
+          const ready = e.cannonReady(c) && c.inArc;
+          const sc = Math.abs(c.z - pos.z) + Math.abs(c.side * 1.25 - pos.x) * 0.3 + (ready ? 0 : c.reload > 0 ? 6 : 12);
+          if (sc < bs) { bs = sc; best = c; }
+        }
+        m.cannon = best;
+        if (best && this.walk(m, best.side * 1.25, best.z + 0.35, dt)) {
+          facePerson(p, best.side, 0, dt, 5);
+          if (e.cannonReady(best) && best.inArc && e.ai.mode !== 'adrift') {
+            m.aimT += dt;
+            if (m.aimT > 0.6 && e.lightCannon(best, rand(0.2, 0.5))) { m.aimT = 0; p.attack = 0.3; }
+          } else { m.aimT = 0; if (best.reload > 0) p.pose = 'ram'; }
+        } else moving = !!best;
+      } else {
+        // Rigger hauls on the lines when the sails change; the mate keeps an eye on us
+        const want = m.role === 'rigger' ? [0.9, -2.6] : [-0.9, 2.8];
+        if (m.role === 'rigger') { if (Math.abs(e.sail - (m.lastSail ?? e.sail)) > 0.02) m.workT = 2.2; m.lastSail = e.sail; }
+        if (this.walk(m, want[0], want[1], dt)) {
+          m.workT -= dt;
+          if (m.workT > 0) { facePerson(p, -1, 0, dt, 4); p.pose = 'haul'; }
+          else { _a.copy(P.pos).sub(e.pos).applyAxisAngle(_up, -e.heading); facePerson(p, _a.x - pos.x, _a.z - pos.z, dt, 2); }
+        } else moving = true;
+      }
+      animatePerson(p, dt, moving, t + k);
+    }
+  }
+
   spawnBoarder(e) {
     const G = this.G, P = G.ship;
     _a.copy(e.root.position); P.root.worldToLocal(_a);
     const side = Math.sign(_a.x) || 1;
     const z = clamp(_a.z * 0.3 + rand(-2.5, 2.5), -6.5, 4.5);
-    const p = makePerson(LOOKS[Math.floor(Math.random() * LOOKS.length)]);
+    const p = makePerson(LOOKS[1 + Math.floor(Math.random() * (LOOKS.length - 1))]);
     const from = new THREE.Vector3(side * 5, 2.8, z), to = new THREE.Vector3(side * (halfWidth(z) - 0.8), 0, z);
     p.g.position.copy(from); P.root.add(p.g);
     this.boarders.push({ id: G.ids.next('boarder'), p, state: 'jump', t: 0, from, to, hp: 2, atkCD: rand(0.6, 1.2), hitCD: 0, swingHit: true });
@@ -185,7 +297,7 @@ export class Enemies {
 
   update(dt, t) {
     const G = this.G;
-    const alive = this.ships.filter((s) => s.alive).length;
+    const alive = this.ships.filter((s) => s.hostile).length;
     if (alive < this.maxShips() && G.ship.alive) {
       this.spawnT -= dt;
       if (this.spawnT <= 0) { this.spawn(); this.spawnT = rand(18, 26); }
@@ -194,10 +306,7 @@ export class Enemies {
       const e = this.ships[i];
       if (e.alive) this.ai(e, dt);
       e.update(dt, t);
-      for (const m of e.crew) {
-        if (!m.p.dead) { _a.copy(G.ship.pos).sub(e.pos); const l = _a.applyAxisAngle(new THREE.Vector3(0, 1, 0), -e.heading); facePerson(m.p, l.x - m.p.g.position.x, l.z - m.p.g.position.z, dt, 2); }
-        animatePerson(m.p, dt, false, t + i);
-      }
+      this.updateCrew(e, dt, t, i);
       if (!e.alive && e.sinkT > 14) { e.dispose(); this.ships.splice(i, 1); }
     }
     this.updateBoarders(dt, t);

@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import { clamp } from './util.js';
 import { WHEEL_MAX, LEVER_MAX } from './ship.js';
+import { ORDERS } from './crew.js';
 
 const _p = new THREE.Vector3();
 
@@ -21,12 +22,14 @@ export function applyAction(G, a) {
   switch (a.type) {
     // Turn the wheel by `delta` radians. Returns how far it actually turned.
     case 'steer': {
+      takeHelm(G, S, player);
       const before = S.wheelAngle;
       S.wheelAngle = clamp(S.wheelAngle + a.delta, -WHEEL_MAX, WHEEL_MAX);
       return S.wheelAngle - before;
     }
     // Move the sail lever to `angle`.
     case 'setSail':
+      takeHelm(G, S, player);
       S.leverAngle = clamp(a.angle, -LEVER_MAX, LEVER_MAX);
       return true;
     // Light the fuse on one cannon. Returns 'lit', 'reloading' or 'busy'.
@@ -71,6 +74,12 @@ export function applyAction(G, a) {
     // Returns true if it hit anyone.
     case 'swordSweep':
       return G.combat.swordCheck(player, a.hilt, a.tip, a.speed);
+    // Give the helmsman the next order (or a specific one).
+    case 'order': {
+      const o = a.order || ORDERS[(ORDERS.indexOf(G.crew.order) + 1) % ORDERS.length];
+      G.crew.setOrder(o);
+      return o;
+    }
     // Desktop sword swing. facing: look direction in ship-local space, flat and normalized.
     case 'deskSlash':
       G.combat.deskSwordHit(player, a.facing);
@@ -78,6 +87,15 @@ export function applyAction(G, a) {
   }
   console.warn('Unknown action', a);
   return false;
+}
+
+// Touching the wheel or sail lever means this player is steering now.
+function takeHelm(G, S, player) {
+  S.helmTouchT = G.t; S.helmToucher = player.id;
+  if (S.helmBy !== player.id) {
+    if (S.helmBy === G.crew.hm.id) G.events.emit('helmHandedBack', { name: G.crew.hm.name });
+    S.helmBy = player.id;
+  }
 }
 
 // Rules that tick for every player each frame (the host will run these for everyone).

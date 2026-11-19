@@ -21,7 +21,14 @@ const LAMP_EMPTY = new THREE.MeshBasicMaterial({ color: 0xff3020 });
 const LAMP_FUSE = new THREE.MeshBasicMaterial({ color: 0xffc020 });
 // Weapon rack spot (ship-local). Items hang just inboard of this, facing starboard.
 export const RACK = { x: -2.2, z: 5.6 };
+// Cannons: along-ship positions, how high their platform lifts them (barrel axis ends up ~1.07 m,
+// about 3.5 ft), and the gun port cut into the bulwark so the barrel clears the rail.
+const CANNON_Z = [-3, 1], GUN_LIFT = 0.45, PORT_HALF = 0.55, PORT_SILL = 0.68;
 const G_ACC = 9.81;
+// Where an enemy's helmsman shelters (ship-local): front wall at z0, side walls to z1, top height.
+export const HELM_COVER = { x: 1.0, z0: 4.95, z1: 6.9, top: 1.58 };
+// Where whoever steers stands, just behind the wheel.
+export const HELM_SPOT = { x: 0, z: 6.3 };
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
 const _s = new THREE.Vector3(), _m = new THREE.Matrix4();
@@ -89,6 +96,8 @@ export class Ship {
     this.comfort = o.comfort ?? 1;
     this.reloadTime = o.reloadTime || 7;
     this.cannons = []; this.sails = []; this.crew = [];
+    // Solid things on deck that stop musket balls (boxes in ship-local space)
+    this.covers = [];
     this.geos = [];
     this.build(o);
   }
@@ -139,18 +148,38 @@ export class Ship {
     const deckGeo = new THREE.ShapeGeometry(deckShape); deckGeo.rotateX(-Math.PI / 2);
     add(deckGeo, deckMat, 0, 0.02, 0);
 
-    // Bulwark wall and rail
-    const wallPos = [];
-    const loop = outline.map(([x, z]) => [x * 0.99, z * 0.996]);
+    // Bulwark wall and rail, with a low gun port cut in the wall at each cannon
     const H = 0.95;
+    const isPort = (x, z) => Math.abs(x) > 1.5 && CANNON_Z.some((cz) => Math.abs(z - cz) < PORT_HALF);
+    const coarse = outline.map(([x, z]) => [x * 0.99, z * 0.996]);
+    const loop = [];
+    for (let i = 0; i < coarse.length; i++) {
+      const [x1, z1] = coarse[i], [x2, z2] = coarse[(i + 1) % coarse.length];
+      const k = Math.max(1, Math.ceil(Math.hypot(x2 - x1, z2 - z1) / 0.12));
+      for (let j = 0; j < k; j++) loop.push([x1 + ((x2 - x1) * j) / k, z1 + ((z2 - z1) * j) / k]);
+    }
+    // Height of each wall segment (segment i runs from loop[i] to loop[i+1])
+    const segH = loop.map(([x1, z1], i) => { const [x2, z2] = loop[(i + 1) % loop.length]; return isPort((x1 + x2) / 2, (z1 + z2) / 2) ? PORT_SILL : H; });
+    const wallPos = [];
     for (let i = 0; i < loop.length; i++) {
-      const [x1, z1] = loop[i], [x2, z2] = loop[(i + 1) % loop.length];
-      wallPos.push(x1, 0, z1, x2, 0, z2, x2, H, z2, x1, 0, z1, x2, H, z2, x1, H, z1);
+      const [x1, z1] = loop[i], [x2, z2] = loop[(i + 1) % loop.length], h = segH[i];
+      wallPos.push(x1, 0, z1, x2, 0, z2, x2, h, z2, x1, 0, z1, x2, h, z2, x1, h, z1);
     }
     const wallGeo = new THREE.BufferGeometry(); wallGeo.setAttribute('position', new THREE.Float32BufferAttribute(wallPos, 3));
     wallGeo.computeVertexNormals(); add(wallGeo, wallMat);
-    const railCurve = new THREE.CatmullRomCurve3(loop.map(([x, z]) => new THREE.Vector3(x, H + 0.03, z)), true);
-    add(new THREE.TubeGeometry(railCurve, 120, 0.07, 5, true), dark);
+    // Rail along the top: one tube per stretch of equal height, starting the walk at a height change
+    const n = loop.length;
+    let s0 = 0; for (let i = 0; i < n; i++) if (segH[i] !== segH[(i - 1 + n) % n]) { s0 = i; break; }
+    for (let i = 0; i < n;) {
+      const h = segH[(s0 + i) % n], pts = [];
+      while (i < n && segH[(s0 + i) % n] === h) { const [x, z] = loop[(s0 + i) % n]; pts.push(new THREE.Vector3(x, h + 0.03, z)); i++; }
+      const [xe, ze] = loop[(s0 + i) % n]; pts.push(new THREE.Vector3(xe, h + 0.03, ze));
+      const closed = pts.length > n;
+      if (closed) pts.pop();
+      add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, closed), Math.max(2, pts.length * 2), h === H ? 0.07 : 0.06, 5, closed), dark);
+      // Posts framing the gun port
+      if (h !== H) for (const pt of [pts[0], pts[pts.length - 1]]) add(new THREE.BoxGeometry(0.14, H - h + 0.1, 0.14), dark, pt.x, (H + h) / 2, pt.z);
+    }
 
     // Stern cabin
     const cw = halfWidth(7.65) * 2 * 0.99;
@@ -159,6 +188,21 @@ export class Ship {
     add(new THREE.BoxGeometry(0.9, 1.9, 0.06), dark, 0, 0.95, 7.29);
     for (const x of [-1.7, 1.7]) add(new THREE.BoxGeometry(0.6, 0.55, 0.05), glow, x, 1.55, 7.29);
     for (const x of [-cw / 2 + 0.1, cw / 2 - 0.1]) add(new THREE.BoxGeometry(0.18, 0.28, 0.18), glow, x, 2.75, 7.4);
+    this.covers.push({ min: new THREE.Vector3(-cw / 2, 0, 7.3), max: new THREE.Vector3(cw / 2, 2.5, 8.0) });
+
+    if (enemy) {
+      // Helm shelter: thick planking around the wheel so the helmsman can't simply be picked
+      // off. Only his head shows over the top.
+      const HT = HELM_COVER.top, z0 = HELM_COVER.z0, z1 = HELM_COVER.z1, xw = HELM_COVER.x;
+      add(new THREE.BoxGeometry(xw * 2 + 0.12, HT, 0.12), wallMat, 0, HT / 2, z0);
+      add(new THREE.BoxGeometry(xw * 2 + 0.24, 0.1, 0.22), dark, 0, HT + 0.03, z0);
+      for (const sx of [-1, 1]) {
+        add(new THREE.BoxGeometry(0.12, HT, z1 - z0), wallMat, sx * xw, HT / 2, (z0 + z1) / 2);
+        add(new THREE.BoxGeometry(0.22, 0.1, z1 - z0 + 0.1), dark, sx * xw, HT + 0.03, (z0 + z1) / 2);
+      }
+      this.covers.push({ min: new THREE.Vector3(-xw - 0.08, 0, z0 - 0.08), max: new THREE.Vector3(xw + 0.08, HT, z0 + 0.08) });
+      for (const sx of [-1, 1]) this.covers.push({ min: new THREE.Vector3(sx * xw - 0.08, 0, z0), max: new THREE.Vector3(sx * xw + 0.08, HT, z1) });
+    }
 
     // Masts, yards, furled canvas, crow's nest, bowsprit
     const masts = [{ z: -1, h: 15, r: 0.24, sails: [{ y: 13.4, w: 6, h: 4.4 }, { y: 8.6, w: 7.6, h: 5.7 }] },
@@ -178,11 +222,13 @@ export class Ship {
     add(new THREE.CylinderGeometry(0.1, 0.17, 5.2, 7), wood, 0, 1.45, -11.85, -70 * Math.PI / 180, 0, 0);
 
     // Cannon carriages (barrels are separate, they move)
-    const cz = [-3, 1];
-    for (const s of [-1, 1]) for (const z of cz) {
-      add(new THREE.BoxGeometry(0.62, 0.3, 0.72), dark, s * 2.3, 0.3, z);
-      for (const dx of [-0.26, 0.26]) for (const dz of [-0.3, 0.3]) add(new THREE.CylinderGeometry(0.14, 0.14, 0.07, 10), wood, s * 2.3 + dx, 0.14, z + dz, 0, 0, Math.PI / 2);
-      const outer = new THREE.Group(); outer.position.set(s * 2.3, 0.62, z); outer.rotation.y = s > 0 ? -Math.PI / 2 : Math.PI / 2;
+    // They sit on a raised gun platform so the back end is at about waist height.
+    for (const s of [-1, 1]) for (const z of CANNON_Z) {
+      add(new THREE.BoxGeometry(1.0, GUN_LIFT, 1.1), wood, s * 2.3, GUN_LIFT / 2, z);
+      add(new THREE.BoxGeometry(1.04, 0.05, 1.14), dark, s * 2.3, GUN_LIFT, z);
+      add(new THREE.BoxGeometry(0.62, 0.3, 0.72), dark, s * 2.3, GUN_LIFT + 0.3, z);
+      for (const dx of [-0.26, 0.26]) for (const dz of [-0.3, 0.3]) add(new THREE.CylinderGeometry(0.14, 0.14, 0.07, 10), wood, s * 2.3 + dx, GUN_LIFT + 0.14, z + dz, 0, 0, Math.PI / 2);
+      const outer = new THREE.Group(); outer.position.set(s * 2.3, GUN_LIFT + 0.62, z); outer.rotation.y = s > 0 ? -Math.PI / 2 : Math.PI / 2;
       const elev = new THREE.Group(); outer.add(elev);
       const barrel = new THREE.Group(); elev.add(barrel);
       barrel.add(new THREE.Mesh(BARREL_GEO, IRON), new THREE.Mesh(KNOB_GEO, IRON), new THREE.Mesh(RING_GEO, IRON));
@@ -192,7 +238,7 @@ export class Ship {
       let lamp = null;
       if (this.isPlayer) {
         // Ready light on the carriage: green = loaded, red = reloading
-        lamp = new THREE.Mesh(LAMP_GEO, LAMP_READY); lamp.position.set(s * 1.95, 0.45, z + 0.45); this.root.add(lamp);
+        lamp = new THREE.Mesh(LAMP_GEO, LAMP_READY); lamp.position.set(s * 1.95, GUN_LIFT + 0.45, z + 0.45); this.root.add(lamp);
       }
       this.cannons.push({ id: `${this.id}/cannon:${this.cannons.length}`, side: s, z, outer, elev, barrel, muzzle, breech, baseYaw: outer.rotation.y, lamp,
         elevation: 0.06, yaw: 0, tElev: 0.06, tYaw: 0, reload: 0, fuse: -1, recoil: 0, inArc: false, sparkT: 0 });
@@ -379,6 +425,9 @@ export class Ship {
     this.rudder = clamp(-this.wheelAngle / WHEEL_MAX, -1, 1);
     this.sail = (LEVER_MAX - this.leverAngle) / (2 * LEVER_MAX);
   }
+
+  // Still worth fighting: afloat, still crewed, and not yet taken as a prize.
+  get hostile() { return this.alive && !this.captured && !this.abandoned; }
 
   // Ready to fire and pointing roughly where it wants to
   cannonReady(c) { return c.reload <= 0 && c.fuse < 0 && this.alive; }

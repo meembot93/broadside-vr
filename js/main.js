@@ -79,6 +79,7 @@ function resetGame() {
   G.enemies.clearAll();
   S.health = S.maxHealth; S.alive = true; S.sinkT = 0; S.speed = 0;
   S.wheelAngle = 0; S.leverAngle = 0.6 - 1.2 * 0.35;
+  S.helmBy = G.player.id; S.holdHeading = S.heading;
   for (const pl of G.players) pl.respawn();
   G.score = 0; G.state = 'play';
   G.events.emit('gameReset');
@@ -108,7 +109,8 @@ function begin(vr) {
     G.hud.msg('Your weapons hang on the rack to your left', 4.5);
     G.hud.msg('Reach a hand near something: it glows if you can use it', 5);
     G.hud.msg('Cannons: hand on the back end, pull TRIGGER', 5);
-    G.hud.msg('Your crew is busy. The fighting is up to you!', 4);
+    G.hud.msg('Walk away from the wheel and Hawkins will steer', 4.5);
+    G.hud.msg('Press A or X to give him orders', 4);
   } else { G.hud.msg('Take the wheel, Captain!', 4); G.hud.msg('Grip the lever to set the sails', 3.5); }
 }
 
@@ -166,10 +168,12 @@ function landCollisions(dt) {
 
 function aimPlayerCannons() {
   const S = G.ship;
-  const enemies = G.enemies.ships.filter((e) => e.alive).sort((a, b) => a.pos.distanceTo(S.pos) - b.pos.distanceTo(S.pos));
+  // Real enemies first; a drifting or captured hull only if nothing else is in the arc
+  const rank = (e) => e.pos.distanceTo(S.pos) + (e.hostile ? 0 : 1e4);
+  const enemies = G.enemies.ships.filter((e) => e.alive).sort((a, b) => rank(a) - rank(b));
   for (const c of S.cannons) {
-    c.inArc = false;
-    for (const e of enemies) if (S.aimCannon(c, e, 0)) { c.inArc = true; break; }
+    c.inArc = false; c.targetHostile = false;
+    for (const e of enemies) if (S.aimCannon(c, e, 0)) { c.inArc = true; c.targetHostile = e.hostile; break; }
     if (!c.inArc) { c.tElev = 0.06; c.tYaw = 0; }
   }
 }
