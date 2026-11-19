@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { canvasTex, damp } from './util.js';
+import { VERSION } from './version.js';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3();
 
@@ -128,6 +129,7 @@ export class Hud {
     g.fillStyle = 'rgba(120,80,30,0.15)'; for (let i = 0; i < 30; i++) g.fillRect(0, i * 12, w, 1);
     g.fillStyle = '#3a2210'; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
     g.font = 'bold 34px Georgia, serif'; g.fillText("Captain's Board", 20, 44);
+    g.font = '18px Georgia, serif'; g.textAlign = 'right'; g.fillText(`v${VERSION}`, w - 16, 40); g.textAlign = 'left';
     g.font = '24px Georgia, serif';
     const bar = (y, label, v, col) => {
       g.fillStyle = '#3a2210'; g.fillText(label, 20, y + 20);

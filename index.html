@@ -16,6 +16,7 @@
     background:#3b2414;color:#f3e6c4;cursor:pointer}
   button:hover{background:#56351d}
   button:disabled{opacity:.4;cursor:default}
+  #version{font-size:17px;color:#ffd25a;margin-bottom:6px;text-align:center;padding:0 16px}
   #note{margin-top:10px;font-size:15px;opacity:.75;min-height:20px}
   .help{display:flex;gap:40px;margin-top:26px;font-size:14px;line-height:1.55;text-align:left;opacity:.85;flex-wrap:wrap;justify-content:center}
   .help b{color:#e8c77a}
@@ -29,6 +30,7 @@
 </head>
 <body>
 <div id="overlay">
+  <div id="version">&nbsp;</div>
   <h1>BROADSIDE</h1>
   <div class="sub">A pirate ship, an open sea, and trouble on the horizon.</div>
   <div>
@@ -61,6 +63,19 @@
 </div>
 <div id="crosshair"></div>
 <div id="dhud"></div>
+<script>
+  // Show when this copy of the game was published, so it's easy to tell an update arrived.
+  (() => { const d = new Date(document.lastModified), el = document.createElement('div');
+    el.id = 'build'; el.textContent = 'Updated ' + d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    el.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:13px;opacity:.6;color:#f3e3c0;font-family:Georgia,serif;z-index:20';
+    document.body.appendChild(el); })();
+  // Make every visit load the newest game files (see sw.js).
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+</script>
+<script type="module">
+  import { VERSION, CHANGES } from './js/version.js';
+  document.getElementById('version').textContent = `Version ${VERSION}  (${CHANGES.join(', ')})`;
+</script>
 <script type="module" src="./js/main.js"></script>
 </body>
 </html>
