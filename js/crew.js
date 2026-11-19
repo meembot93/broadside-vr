@@ -15,7 +15,7 @@ export const ORDER_TEXT = {
 };
 
 // Spots on deck (ship-local x, z) where the crew have work to do.
-const BOW_SPOTS = [[0.7, -7.6], [-0.8, -7.4], [0.2, -8.2]];
+const BOW_SPOTS = [[1.3, -6.8], [-1.3, -6.6], [1.1, -7.8]]; // clear of the grapple gun
 const ODD_JOBS = [[1.9, -4.6], [-1.9, -4.4], [1.6, 2.9], [-1.5, 3.1], [0.9, -2.4], [-0.9, -6.0]];
 const HELM_STANDBY = [1.75, 4.3];
 
@@ -25,7 +25,7 @@ export class Crew {
     const defs = [
       { look: { shirt: 0xd9cfb8, pants: 0x3b4a6b, bandana: 0xa82020, beard: 0x3a2414 }, role: 'gunner', side: -1, home: [-1.15, -1.6], name: 'Bones' },
       { look: { shirt: 0x7f8f5f, pants: 0x4a3b2b, hat: 0x2a1d14 }, role: 'gunner', side: 1, home: [1.15, -1.6], name: 'Patch' },
-      { look: { shirt: 0x6a2f2a, pants: 0x2b2b2b, bandana: 0x2050a0, skin: 0x8d5a3b }, role: 'lookout', side: 0, home: [0.6, -7.6], name: 'Finn' },
+      { look: { shirt: 0x6a2f2a, pants: 0x2b2b2b, bandana: 0x2050a0, skin: 0x8d5a3b }, role: 'lookout', side: 0, home: [1.3, -6.8], name: 'Finn' },
       { look: { shirt: 0x9a8a6a, pants: 0x2e3a2a, bandana: 0x5a3a1a, skin: 0xa8734f }, role: 'bosun', side: 0, home: [-1.5, 3.1], name: 'Mags' },
       { look: { shirt: 0x24304a, pants: 0x2a2a2a, hat: 0x111111, beard: 0x8a8a8a }, role: 'helmsman', side: 0, home: HELM_STANDBY, name: 'Hawkins' },
     ];

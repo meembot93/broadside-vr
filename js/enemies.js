@@ -66,6 +66,7 @@ export class Enemies {
     const G = this.G, P = G.ship, A = e.ai;
     if (e.abandoned) { this.drift(e, dt); return; }
     const helm = this.helmsman(e), sail0 = e.sail, rudder0 = e.rudder;
+    if (e.lock) { this.aiLashed(e, dt); return; }
     const dx = P.pos.x - e.pos.x, dz = P.pos.z - e.pos.z, dist = Math.hypot(dx, dz);
     const bearing = Math.atan2(-dx, -dz);
     if (dist < 100) A.inRangeT += dt;
@@ -100,12 +101,26 @@ export class Enemies {
       if (!c.inArc) { c.tElev = 0.05; c.tYaw = 0; }
     }
 
+    // Close enough while trying to board: throw grapples and lash on
+    if (A.mode === 'board' && dist < 15 && helm && P.alive && !G.grapples.lockFor(e)) G.grapples.lash(e, 'them');
+
     // Boarding (only while someone is alive on deck to fight them)
     if (A.mode === 'board' && dist < 24 && P.alive && G.players.some((pl) => !pl.dead)) {
       A.boardT -= dt;
       const live = this.boarders.filter((b) => b.state !== 'dead').length;
       if (A.boardT <= 0 && live < 3 && A.sent < 5) { A.boardT = rand(4, 7); A.sent++; this.spawnBoarder(e); }
     }
+  }
+
+  // Lashed alongside us: guns can't bear, but the boarding party keeps coming.
+  aiLashed(e, dt) {
+    const G = this.G, A = e.ai;
+    for (const c of e.cannons) { c.inArc = false; c.tElev = 0.05; c.tYaw = 0; }
+    if (!A.canBoard || e.abandoned || !G.ship.alive || !G.players.some((pl) => !pl.dead && pl.ship === G.ship)) return;
+    if (e.lock.phase !== 'locked') return;
+    A.boardT -= dt;
+    const live = this.boarders.filter((b) => b.state !== 'dead').length;
+    if (A.boardT <= 0 && live < 3 && A.sent < 5) { A.boardT = rand(4, 7); A.sent++; this.spawnBoarder(e); }
   }
 
   // A ship with nobody left aboard: loose rudder, sails slowly spilling their wind.
@@ -170,8 +185,11 @@ export class Enemies {
       const p = m.p, pos = p.g.position;
       if (p.dead) { animatePerson(p, dt, false, t + k); continue; }
       let moving = false; p.pose = null;
-      m.hitCD -= dt;
+      m.hitCD -= dt; m.atkCD -= dt;
       if (!e.alive) { animatePerson(p, dt, false, t + k); continue; }
+      // Someone of ours is aboard: drop everything and fight (the helmsman only if they come close)
+      const foe = this.intruderFor(e, pos);
+      if (foe && (m.role !== 'helm' || foe.d < 2.5)) { this.fightIntruder(e, m, foe.pl, dt, t + k); continue; }
       if (m.role === 'helm') {
         if (this.walk(m, HELM_SPOT.x, HELM_SPOT.z, dt)) { facePerson(p, 0, -1, dt, 4); p.pose = 'steer'; } else moving = true;
       } else if (m.role === 'gunner') {
@@ -203,6 +221,50 @@ export class Enemies {
       }
       animatePerson(p, dt, moving, t + k);
     }
+  }
+
+  // The nearest living player standing on this enemy ship.
+  intruderFor(e, pos) {
+    let best = null;
+    for (const pl of this.G.players) {
+      if (pl.dead || pl.ship !== e) continue;
+      const d = Math.hypot(pl.headLocal.x - pos.x, pl.headLocal.z - pos.z);
+      if (!best || d < best.d) best = { pl, d };
+    }
+    return best;
+  }
+
+  fightIntruder(e, m, pl, dt, t) {
+    const p = m.p, pos = p.g.position, head = pl.headLocal;
+    const dx = head.x - pos.x, dz = head.z - pos.z, d = Math.hypot(dx, dz);
+    facePerson(p, dx, dz, dt);
+    // Two at a time; the rest circle just out of reach waiting their turn
+    const closer = e.crew.filter((o) => o !== m && !o.p.dead && Math.hypot(head.x - o.p.g.position.x, head.z - o.p.g.position.z) < d).length;
+    const reach = closer >= 2 ? 2.4 : 1.05;
+    let moving = false;
+    if (d > reach && p.attack < 0) { this.walk(m, head.x, head.z, dt, 1.8); moving = true; facePerson(p, dx, dz, dt); }
+    for (const o of e.crew) {
+      if (o === m || o.p.dead) continue;
+      const ox = pos.x - o.p.g.position.x, oz = pos.z - o.p.g.position.z, od = Math.hypot(ox, oz);
+      if (od < 0.75 && od > 1e-3) { pos.x += (ox / od) * (0.75 - od) * 0.5; pos.z += (oz / od) * (0.75 - od) * 0.5; }
+    }
+    if (closer < 2 && d < 1.45 && m.atkCD <= 0 && p.attack < 0) { p.attack = 0; m.swingHit = false; m.atkCD = rand(1.8, 2.8); }
+    if (p.attack > 0.62 && !m.swingHit) {
+      m.swingHit = true;
+      _a.set(pos.x, 1.3, pos.z); e.root.localToWorld(_a); this.G.events.emit('boarderSwing', { pos: _a });
+      if (d < 1.7) this.G.hurtPlayer(pl, 7);
+    }
+    animatePerson(p, dt, moving, t);
+  }
+
+  // A player's sword (or desktop slash) connects with one of their deck crew.
+  hitCrew(e, m, dmg, kx, kz) {
+    if (m.p.dead || m.hitCD > 0) return;
+    m.hp -= dmg; m.hitCD = 0.35;
+    const d = Math.hypot(kx, kz) || 1;
+    m.p.g.position.x += (kx / d) * 0.35; m.p.g.position.z += (kz / d) * 0.35;
+    m.p.attack = -1; m.atkCD = Math.max(m.atkCD, 0.9);
+    if (m.hp <= 0) this.killCrew(e, m, 'sword');
   }
 
   spawnBoarder(e) {
@@ -239,6 +301,7 @@ export class Enemies {
   boarderTarget(pos) {
     let best = null, bd = Infinity, any = null, ad = Infinity;
     for (const pl of this.G.players) {
+      if (pl.ship !== this.G.ship) continue;
       const d = Math.hypot(pl.headLocal.x - pos.x, pl.headLocal.z - pos.z);
       if (d < ad) { ad = d; any = pl; }
       if (!pl.dead && d < bd) { bd = d; best = pl; }
@@ -266,7 +329,9 @@ export class Enemies {
         continue;
       }
       // Fight: close in on a player and swing
-      const victim = this.boarderTarget(pos), head = victim.headLocal, canFight = !victim.dead;
+      const victim = this.boarderTarget(pos);
+      if (!victim) { animatePerson(p, dt, false, t); continue; } // everyone's over on their ship
+      const head = victim.headLocal, canFight = !victim.dead;
       const dx = head.x - pos.x, dz = head.z - pos.z, d = Math.hypot(dx, dz);
       facePerson(p, dx, dz, dt);
       let moving = false;

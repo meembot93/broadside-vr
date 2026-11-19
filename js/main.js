@@ -7,6 +7,7 @@ import { Combat } from './combat.js';
 import { Enemies } from './enemies.js';
 import { Player } from './player.js';
 import { Crew } from './crew.js';
+import { Grapples } from './grapple.js';
 import { Hud } from './hud.js';
 import { rand } from './util.js';
 import { Events } from './events.js';
@@ -50,6 +51,7 @@ G.player = new Player(G);          // you, on this headset
 G.players = [G.player];             // everyone on board; friends get added here later
 G.items = G.player.items;           // muskets and cutlass on the rack (shared by the crew of players)
 G.crew = new Crew(G);
+G.grapples = new Grapples(G);
 G.hud = new Hud(G);
 G.player.setupVR(renderer);
 
@@ -76,6 +78,7 @@ G.events.on('playerDied', () => { G.state = 'dead'; G.stateT = 3; });
 
 function resetGame() {
   const S = G.ship;
+  G.grapples.clearAll();
   G.enemies.clearAll();
   S.health = S.maxHealth; S.alive = true; S.sinkT = 0; S.speed = 0;
   S.wheelAngle = 0; S.leverAngle = 0.6 - 1.2 * 0.35;
@@ -111,6 +114,7 @@ function begin(vr) {
     G.hud.msg('Cannons: hand on the back end, pull TRIGGER', 5);
     G.hud.msg('Walk away from the wheel and Hawkins will steer', 4.5);
     G.hud.msg('Press A or X to give him orders', 4);
+    G.hud.msg('Grapple gun on the bow: hook a ship and board her', 4.5);
   } else { G.hud.msg('Take the wheel, Captain!', 4); G.hud.msg('Grip the lever to set the sails', 3.5); }
 }
 
@@ -202,7 +206,9 @@ function simulate(dt) {
   S.update(dt, t);
 
   if (playing && G.started) {
+    G.grapples.update(dt);
     G.enemies.update(dt, t);
+    G.grapples.checkPrize();
     aimPlayerCannons();
     G.crew.update(dt, t);
     G.combat.update(dt, t);
@@ -234,6 +240,7 @@ function simulate(dt) {
   creakT -= dt;
   if (creakT <= 0) { creakT = rand(4, 9); _a.set(rand(-2, 2), 1, rand(-6, 6)); S.root.localToWorld(_a); G.audio.creak(_a); }
 
+  G.grapples.view(dt);
   camera.getWorldPosition(_a);
   G.world.update(t, S.pos, _a);
   G.fx.update(dt);
