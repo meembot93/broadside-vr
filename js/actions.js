@@ -74,6 +74,14 @@ export function applyAction(G, a) {
     // Returns true if it hit anyone.
     case 'swordSweep':
       return G.combat.swordCheck(player, a.hilt, a.tip, a.speed);
+    // Swing the grapple gun to point along dir (world).
+    case 'aimGrapple':
+      G.grapples.aimAlong(a.dir);
+      return true;
+    // Fire the grapple hook along dir (world), or cut the lines if any are out.
+    case 'fireGrapple':
+      if (G.grapples.anyLineOut()) return G.grapples.cut() ? 'cut' : 'busy';
+      return G.grapples.fire(a.dir) ? 'fired' : 'busy';
     // Give the helmsman the next order (or a specific one).
     case 'order': {
       const o = a.order || ORDERS[(ORDERS.indexOf(G.crew.order) + 1) % ORDERS.length];

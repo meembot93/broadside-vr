@@ -16,7 +16,7 @@ function shipState(s) {
     cannons: s.cannons.map((c) => ({ id: c.id, reload: r2(c.reload), fuse: r2(c.fuse), elev: r3(c.tElev), yaw: r3(c.tYaw) })),
     crew: s.crew.map((m) => ({ id: m.id, role: m.role, dead: m.p.dead, pos: v3(m.p.g.position), pose: m.p.pose })),
     ai: s.ai ? { mode: s.ai.mode } : undefined,
-    abandoned: !!s.abandoned, helmBy: s.helmBy,
+    abandoned: !!s.abandoned, captured: !!s.captured, helmBy: s.helmBy,
   };
 }
 
@@ -24,7 +24,12 @@ export function snapshot(G) {
   return {
     t: r3(G.t), state: G.state, score: G.score,
     ships: [G.ship, ...G.enemies.ships].map(shipState),
-    players: G.players.map((p) => ({ id: p.id, head: v3(p.headLocal), health: r2(p.health), dead: p.dead })),
+    players: G.players.map((p) => ({ id: p.id, ship: p.ship.id, head: v3(p.headLocal), health: r2(p.health), dead: p.dead })),
+    grapple: {
+      aim: [r3(G.grapples.aimYaw), r3(G.grapples.aimPitch)],
+      hook: G.grapples.hook ? { pos: v3(G.grapples.hook.pos), vel: v3(G.grapples.hook.vel) } : null,
+      locks: G.grapples.locks.map((l) => ({ ship: l.e.id, by: l.by, phase: l.phase, side: l.side, zOff: r2(l.zOff), hook: v3(l.hookLocal) })),
+    },
     items: G.items.map((it) => ({ id: it.id, kind: it.kind, heldBy: it.heldBy, loaded: it.loaded })),
     order: G.crew.order,
     crew: G.crew.members.map((m) => ({ id: m.id, role: m.role, pos: v3(m.p.g.position), attack: r2(m.p.attack), pose: m.p.pose })),

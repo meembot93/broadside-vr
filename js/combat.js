@@ -159,9 +159,27 @@ export class Combat {
 
   // Sword blade (hilt->tip, both in player-ship local space) against boarders.
   // `player` is whoever swung it: boarders get knocked back away from them.
+  // hilt/tip are in the local space of the ship the player stands on.
   swordCheck(player, hilt, tip, speed) {
     const G = this.G; let any = false;
     if (speed < 2.2) return false;
+    if (player.ship !== G.ship) {
+      // Fighting on an enemy deck: their crew
+      const e = player.ship;
+      for (const m of e.crew) {
+        if (m.p.dead || m.hitCD > 0) continue;
+        const p = m.p.g.position;
+        _c.set(p.x, p.y + 0.3, p.z); _d.set(p.x, p.y + 1.75, p.z);
+        if (segSegDist(hilt, tip, _c, _d).d < 0.32) {
+          _a.copy(tip).sub(hilt).multiplyScalar(0.7).add(hilt); e.root.localToWorld(_a);
+          G.events.emit('bladeContact', { pos: _a });
+          if (m.p.attack >= 0 && m.p.attack < 0.5 && Math.random() < 0.3) { G.events.emit('parried', { pos: _a }); m.hitCD = 0.3; m.p.attack = -1; }
+          else { G.events.emit('boarderStruck', { pos: _a }); G.enemies.hitCrew(e, m, speed > 6 ? 2 : 1, p.x - player.headLocal.x, p.z - player.headLocal.z); }
+          any = true;
+        }
+      }
+      return any;
+    }
     for (const b of G.enemies.boarders) {
       if (b.state === 'dead' || b.hitCD > 0) continue;
       const p = b.p.g.position;
@@ -183,6 +201,19 @@ export class Combat {
   deskSwordHit(player, facing) {
     const G = this.G, h = player.headLocal;
     _a.copy(facing);
+    if (player.ship !== G.ship) {
+      const e = player.ship;
+      for (const m of e.crew) {
+        if (m.p.dead) continue;
+        const p = m.p.g.position; const dx = p.x - h.x, dz = p.z - h.z, d = Math.hypot(dx, dz);
+        if (d < 2.3 && (dx * _a.x + dz * _a.z) / Math.max(d, 1e-3) > 0.5) {
+          _b.set(p.x, 1.3, p.z); e.root.localToWorld(_b);
+          G.events.emit('bladeContact', { pos: _b }); G.events.emit('boarderStruck', { pos: _b });
+          G.enemies.hitCrew(e, m, 1, dx, dz);
+        }
+      }
+      return;
+    }
     for (const b of G.enemies.boarders) {
       if (b.state === 'dead') continue;
       const p = b.p.g.position; const dx = p.x - h.x, dz = p.z - h.z, d = Math.hypot(dx, dz);

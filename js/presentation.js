@@ -71,6 +71,27 @@ export function wirePresentation(G) {
   on('enemyHelmTaken', () => hud.msg('Another of theirs is running for the wheel', 2.5));
   on('enemyAbandoned', () => { hud.msg('Their whole crew is down! She’s drifting', 4); G.crew.cheer(); audio.cheer(); });
 
+  // ---- Grapples and boarding ----
+  on('grappleFired', ({ pos }) => { fx.flash(pos, 0.8); fx.smoke(pos, G.grapples.gunDir(_a), 4, 0.3); audio.musket(pos); audio.swoosh(pos); });
+  on('grappleMissed', ({ pos, far }) => { if (pos.y < 0.5) fx.splash(pos, 0.4); hud.msg(far ? 'Out of reach! Get within 40 m' : 'Missed! Reloading the hook', 2); });
+  on('grappleHooked', ({ pos }) => { audio.woodHit(pos); audio.thud(pos); hud.msg('Hooked her! Hauling her alongside', 3); });
+  on('enemyGrappled', ({ ship }) => { audio.swoosh(ship.root.position); hud.msg('They’ve thrown grapples! Stand by to repel boarders', 3.5); });
+  on('shipsLashed', ({ by }) => {
+    audio.woodHit(G.ship.root.position);
+    hud.msg(by === 'us' ? 'Lashed alongside! Climb over the rail to board' : 'They’re alongside! You can board them too', 3.5);
+  });
+  on('grappleReleased', ({ why }) => {
+    if (why === 'cut') hud.msg('Lines cut', 2);
+    else if (why === 'theyCut') hud.msg('They’ve cut their lines and are pulling away', 3);
+  });
+  on('playerCrossed', ({ player, home }) => { if (isMe(player)) hud.msg(home ? 'Back aboard our ship' : 'You’re on their deck! Cut them down', 2.5); });
+  on('strandedAboard', ({ player }) => { if (isMe(player)) hud.msg('She’s going down! You scramble back aboard', 3); });
+  on('prizeTaken', ({ score }) => {
+    hud.msg('She’s ours! Prize taken', 3.5); hud.msg('Plundered timber patches our hull', 3);
+    G.crew.cheer(); audio.cheer(); audio.bell();
+  });
+  on('prizeScuttled', () => hud.msg('The prize is cut loose and scuttled', 3));
+
   // ---- Our helm and crew ----
   const ORDER_SAY = { hold: 'Holding this course', chase: 'Engaging the enemy', alongside: 'Bringing us alongside', heave: 'Heaving to, sails furled' };
   on('helmTaken', ({ name, order }) => hud.msg(`${name} has the wheel: ${ORDER_SAY[order]}`, 3.5));
