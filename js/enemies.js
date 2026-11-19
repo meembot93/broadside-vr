@@ -4,11 +4,15 @@ import { makePerson, animatePerson, facePerson } from './people.js';
 import { clamp, angleWrap, rand, damp } from './util.js';
 
 const _a = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
+// Enemy pirates, one look per job (helm, gunner, gunner, rigger, mate): a captain in a dark
+// coat at the wheel, the rest in darker, grubbier clothes than our own crew. See people.js.
 const LOOKS = [
-  { shirt: 0x2a2a2a, pants: 0x5a1a1a, bandana: 0x111111, cutlass: true, beard: 0x1a1a1a },
-  { shirt: 0x7a1d1d, pants: 0x2a2a2a, hat: 0x111111, cutlass: true },
-  { shirt: 0x4a4038, pants: 0x1e1e2a, bandana: 0x7a1d1d, cutlass: true, skin: 0x8d5a3b },
-  { shirt: 0x5a5a3a, pants: 0x3a2a1a, hat: 0x2a1a10, cutlass: true, beard: 0x5a3a1a },
+  { type: 'captain', coat: 0x2a1e1e, hat: 0x5a1a1a, cutlass: true },
+  { type: 'gunner', bandana: 0x1e1e1e, pants: 0x3a1a1a, cutlass: true },
+  { type: 'gunner', bandana: 0x7a1d1d, pants: 0x1e1e2a, cutlass: true },
+  { type: 'deckhand', bandana: 0x3a3a3a, vest: 0x3a3430, cutlass: true },
+  { type: 'sailor', vest: 0x2a2a2a, hat: 0x1e1814, cutlass: true },
+  { type: 'swashbuckler', vest: 0x3a2a20, sash: 0x1e1e1e, cutlass: true },
 ];
 
 export class Enemies {
@@ -272,7 +276,7 @@ export class Enemies {
     _a.copy(e.root.position); P.root.worldToLocal(_a);
     const side = Math.sign(_a.x) || 1;
     const z = clamp(_a.z * 0.3 + rand(-2.5, 2.5), -6.5, 4.5);
-    const p = makePerson(LOOKS[Math.floor(Math.random() * LOOKS.length)]);
+    const p = makePerson(LOOKS[1 + Math.floor(Math.random() * (LOOKS.length - 1))]);
     const from = new THREE.Vector3(side * 5, 2.8, z), to = new THREE.Vector3(side * (halfWidth(z) - 0.8), 0, z);
     p.g.position.copy(from); P.root.add(p.g);
     this.boarders.push({ id: G.ids.next('boarder'), p, state: 'jump', t: 0, from, to, hp: 2, atkCD: rand(0.6, 1.2), hitCD: 0, swingHit: true });

@@ -23,11 +23,11 @@ export class Crew {
   constructor(G) {
     this.G = G;
     const defs = [
-      { look: { shirt: 0xd9cfb8, pants: 0x3b4a6b, bandana: 0xa82020, beard: 0x3a2414 }, role: 'gunner', side: -1, home: [-1.15, -1.6], name: 'Bones' },
-      { look: { shirt: 0x7f8f5f, pants: 0x4a3b2b, hat: 0x2a1d14 }, role: 'gunner', side: 1, home: [1.15, -1.6], name: 'Patch' },
-      { look: { shirt: 0x6a2f2a, pants: 0x2b2b2b, bandana: 0x2050a0, skin: 0x8d5a3b }, role: 'lookout', side: 0, home: [1.3, -6.8], name: 'Finn' },
-      { look: { shirt: 0x9a8a6a, pants: 0x2e3a2a, bandana: 0x5a3a1a, skin: 0xa8734f }, role: 'bosun', side: 0, home: [-1.5, 3.1], name: 'Mags' },
-      { look: { shirt: 0x24304a, pants: 0x2a2a2a, hat: 0x111111, beard: 0x8a8a8a }, role: 'helmsman', side: 0, home: HELM_STANDBY, name: 'Hawkins' },
+      { look: { type: 'gunner', bandana: 0xa82020, pants: 0x3b4a6b, hair: 0x3a2414, seed: 11 }, role: 'gunner', side: -1, home: [-1.15, -1.6], name: 'Bones' },
+      { look: { type: 'gunner', bandana: 0x2f5a8a, pants: 0x4a3b2b, patch: true, seed: 12 }, role: 'gunner', side: 1, home: [1.15, -1.6], name: 'Patch' },
+      { look: { type: 'deckhand', bandana: 0x6a8aa0, skin: 0x8d5a3b, seed: 13 }, role: 'lookout', side: 0, home: [1.3, -6.8], name: 'Finn' },
+      { look: { type: 'swashbuckler', skin: 0xa8734f, seed: 14 }, role: 'bosun', side: 0, home: [-1.5, 3.1], name: 'Mags' },
+      { look: { type: 'sailor', vest: 0x24304a, hat: 0x3a2a20, beard: 0x8a8a8a, patch: false, seed: 15 }, role: 'helmsman', side: 0, home: HELM_STANDBY, name: 'Hawkins' },
     ];
     this.members = defs.map((d, i) => {
       const p = makePerson({ ...d.look, cutlass: d.role === 'gunner' });
