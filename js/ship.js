@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { waveHeight } from './waves.js';
 import { clamp, damp, angleWrap, canvasTex } from './util.js';
+import { woodify } from './materials.js';
 
 // Ship-local frame: deck at y=0, bow toward -Z, starboard toward +X.
 export const BOW = -10, STERN = 8;
@@ -91,9 +92,9 @@ export class Ship {
 
   build(o) {
     const enemy = !this.isPlayer;
-    const hullMat = new THREE.MeshLambertMaterial({ color: enemy ? 0x2f2823 : 0x5d3b22 });
+    const hullMat = woodify(new THREE.MeshLambertMaterial({ color: enemy ? 0x2f2823 : 0x5d3b22 }));
     const trimMat = new THREE.MeshLambertMaterial({ color: enemy ? 0x7a1515 : 0xb8902f });
-    const wallMat = new THREE.MeshLambertMaterial({ color: enemy ? 0x3a3029 : 0x6e4a2c, side: THREE.DoubleSide });
+    const wallMat = woodify(new THREE.MeshLambertMaterial({ color: enemy ? 0x3a3029 : 0x6e4a2c, side: THREE.DoubleSide }), 0.22);
     const wood = new THREE.MeshLambertMaterial({ color: 0x6b4a2b });
     const dark = new THREE.MeshLambertMaterial({ color: 0x3a2616 });
     const deckMat = new THREE.MeshLambertMaterial({ map: plankTex(enemy ? '#6d5a46' : '#a07a4f', 'rgba(40,25,10,0.8)') });

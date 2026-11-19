@@ -122,14 +122,23 @@ let last = performance.now(), creakT = 3;
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
 const allShips = () => [G.ship, ...G.enemies.ships];
 
-function islandCollisions() {
+// Keep ships off the coast: sample bow, middle and stern against the land and push back toward deep water.
+const _grad = { x: 0, z: 0 }, _pt = { x: 0, z: 0 };
+let agroundMsgT = 0;
+function landCollisions(dt) {
+  const W = G.world;
+  agroundMsgT -= dt;
   for (const s of allShips()) {
-    for (const isl of G.world.islands) {
-      const dx = s.pos.x - isl.x, dz = s.pos.z - isl.z, d = Math.hypot(dx, dz), r = isl.r + 9;
-      if (d < r) {
-        s.pos.x = isl.x + (dx / d) * r; s.pos.z = isl.z + (dz / d) * r; s.speed *= 0.9;
-        if (s === G.ship && s.speed > 1) G.hud.msg('Ran aground! Steer clear of the island', 2.5);
-      }
+    for (const lz of [-9, 0, 7]) {
+      s.localToWorldXZ(0, lz, _pt);
+      const h = W.landHeight(_pt.x, _pt.z);
+      if (h <= -2.2) continue;
+      W.landGradient(_pt.x, _pt.z, _grad);
+      const g = Math.hypot(_grad.x, _grad.z) || 1;
+      const push = Math.min(1.2, (h + 2.2) * 0.4 + 0.1);
+      s.pos.x -= (_grad.x / g) * push; s.pos.z -= (_grad.z / g) * push;
+      s.speed *= 0.92;
+      if (s === G.ship && s.speed > 0.8 && agroundMsgT <= 0) { agroundMsgT = 4; G.hud.msg('Ran aground! Steer back to open water', 2.5); }
     }
   }
 }
@@ -164,7 +173,7 @@ function simulate(dt) {
     aimPlayerCannons();
     G.crew.update(dt, t);
     G.combat.update(dt, t);
-    islandCollisions();
+    landCollisions(dt);
 
     if (G.state === 'play' && !S.alive) {
       G.state = 'sinking'; G.stateT = 7;

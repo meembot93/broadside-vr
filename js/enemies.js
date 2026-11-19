@@ -21,8 +21,13 @@ export class Enemies {
 
   spawn() {
     const G = this.G, P = G.ship;
-    const a = rand(0, Math.PI * 2), d = G.debug ? 110 : rand(240, 300);
-    const x = P.pos.x + Math.sin(a) * d, z = P.pos.z + Math.cos(a) * d;
+    // Pick a spot in open water (the cove has land on most sides)
+    let a = 0, d = 0, x = 0, z = 0;
+    for (let i = 0; i < 40; i++) {
+      a = rand(0, Math.PI * 2); d = G.debug ? 110 : rand(220, 300) * (i < 20 ? 1 : 0.75);
+      x = P.pos.x + Math.sin(a) * d; z = P.pos.z + Math.cos(a) * d;
+      if (G.world.isOpenWater(x, z, 30)) break;
+    }
     const heading = Math.atan2(-(P.pos.x - x), -(P.pos.z - z));
     const s = new Ship(G.scene, { x, z, heading, maxSpeed: 7.6, turnRate: 0.22, health: 100, sail: 1, reloadTime: 9 });
     s.ai = { canBoard: this.ships.length === 0 && G.score === 0 ? true : Math.random() < 0.6, mode: 'approach', inRangeT: 0, boardT: 3, sent: 0 };
@@ -46,6 +51,7 @@ export class Enemies {
   }
 
   steer(e, desired) {
+    desired = this.G.world.avoidLand(e.pos.x, e.pos.z, desired);
     e.rudder = clamp(angleWrap(e.heading - desired) * 1.6, -1, 1);
   }
 
