@@ -12,7 +12,8 @@ Add `?debug` to the address to make enemies spawn quickly and close by.
 **Quest:** left stick walk, right stick snap turn (45°), grip = grab, trigger = fire.
 Grab the wheel to steer, push the sail lever forward for more sail, put an empty hand at a
 cannon's back end and pull the trigger to fire it. Muskets and a cutlass hang on the rack
-behind the main mast.
+on the port (left) side of the helm. Anything you can use glows when your hand is near it.
+Your crew only fires a cannon now and then, so the fighting is up to you.
 
 **Desktop test mode:** WASD + mouse, Q/E wheel, R/F sails, 1/2/3 weapons, Space = broadside.
 

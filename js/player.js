@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { halfWidth } from './ship.js';
-import { clamp, angleWrap } from './util.js';
+import { halfWidth, RACK } from './ship.js';
+import { clamp, angleWrap, canvasTex } from './util.js';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _q = new THREE.Quaternion();
+const _seg = new THREE.Line3(), _p = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 const WOOD = new THREE.MeshLambertMaterial({ color: 0x6b4426 });
 const IRONM = new THREE.MeshLambertMaterial({ color: 0x2b2d33 });
@@ -42,11 +43,35 @@ function buildSword() {
 
 function buildGlove() {
   const g = new THREE.Group();
-  const palm = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.045, 0.1), LEATHER); palm.position.z = 0.01; g.add(palm);
+  const palm = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.045, 0.1), LEATHER.clone()); palm.position.z = 0.01; g.add(palm);
+  g.userData.palm = palm;
   const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.08, 8).rotateX(Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0xd8cdb4 }));
   cuff.position.z = 0.09; g.add(cuff);
   return g;
 }
+
+// A text label drawn on a canvas. Sprites always face the viewer.
+function makeLabel(w = 512, h = 128, scale = 0.32) {
+  const tex = canvasTex(w, h, () => {});
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
+  sp.scale.set(scale, scale * h / w, 1); sp.renderOrder = 997; sp.visible = false;
+  sp.userData.text = '';
+  sp.userData.set = (text) => {
+    if (sp.userData.text === text) return; sp.userData.text = text;
+    const g = tex.userData.ctx; g.clearRect(0, 0, w, h);
+    const lines = text.split('\n'), fs = Math.min(64, (h - 24) / lines.length * 0.85);
+    g.fillStyle = 'rgba(20,12,6,0.82)'; g.beginPath(); g.roundRect(6, 6, w - 12, h - 12, 22); g.fill();
+    g.strokeStyle = '#ffd25a'; g.lineWidth = 5; g.stroke();
+    g.fillStyle = '#fff3cf'; g.font = `bold ${fs}px Georgia, serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    lines.forEach((ln, i) => g.fillText(ln, w / 2, h / 2 + (i - (lines.length - 1) / 2) * fs * 1.15, w - 30));
+    tex.needsUpdate = true;
+  };
+  return sp;
+}
+
+const SWORD_TILT = 0.35; // extra upward tilt of the blade in the hand (radians)
+const _m = new THREE.Matrix4(), _q2 = new THREE.Quaternion();
+const MARK_MAT = new THREE.MeshBasicMaterial({ color: 0xffd25a, transparent: true, opacity: 0.55, depthTest: false, depthWrite: false });
 
 export class Player {
   constructor(G) {
@@ -65,27 +90,67 @@ export class Player {
     this.vignette.renderOrder = 999; this.vignette.visible = false; G.camera.add(this.vignette);
 
     const homeQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
-    const mk = (kind, x) => {
+    const mk = (kind, dz) => {
       const it = kind === 'sword' ? buildSword() : buildMusket();
-      Object.assign(it, { kind, home: { pos: new THREE.Vector3(x, 1.0, -0.5), quat: homeQ.clone() }, holder: null, returning: false,
+      Object.assign(it, { kind, home: { pos: new THREE.Vector3(RACK.x + 0.02, 1.0, RACK.z + dz), quat: homeQ.clone() }, holder: null, returning: false,
         loaded: true, reloadT: 0, kick: 0, prevTip: new THREE.Vector3(), hasPrev: false, swooshCD: 0 });
       ship.root.add(it.obj); it.obj.position.copy(it.home.pos); it.obj.quaternion.copy(it.home.quat);
       return it;
     };
-    this.items = [mk('musket', -0.42), mk('musket', -0.05), mk('sword', 0.38)];
+    this.items = [mk('musket', -0.45), mk('musket', -0.05), mk('sword', 0.4)];
+
+    // Sign above the rack
+    const signTex = canvasTex(1024, 300, (g, w, h) => {
+      g.fillStyle = '#e8d6a8'; g.fillRect(0, 0, w, h);
+      g.strokeStyle = '#3a2210'; g.lineWidth = 14; g.strokeRect(7, 7, w - 14, h - 14);
+      g.fillStyle = '#3a2210'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = 'bold 92px Georgia, serif'; g.fillText('WEAPONS', w / 2, 82);
+      g.font = 'bold 54px Georgia, serif'; g.fillText('Squeeze GRIP (side button) to take', w / 2, 170);
+      g.fillText('Pull TRIGGER to shoot', w / 2, 240);
+    });
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.41), new THREE.MeshBasicMaterial({ map: signTex }));
+    sign.position.set(RACK.x - 0.07, 2.03, RACK.z); sign.rotation.y = Math.PI / 2;
+    ship.root.add(sign);
   }
 
   // ---------- VR ----------
   setupVR(renderer) {
+    this.renderer = renderer;
     for (let i = 0; i < 2; i++) {
       const ctrl = renderer.xr.getController(i), grip = renderer.xr.getControllerGrip(i);
       this.dolly.add(ctrl, grip);
       const glove = buildGlove(); grip.add(glove);
-      const h = { i, ctrl, grip, glove, src: null, gp: null, side: '', trig: false, sq: false, held: null, wheelPrev: 0, tickAcc: 0 };
-      ctrl.addEventListener('connected', (e) => { h.src = e.data; h.gp = e.data.gamepad || null; h.side = e.data.handedness; });
-      ctrl.addEventListener('disconnected', () => { this.release(h); h.src = null; h.gp = null; });
+      const mark = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 8), MARK_MAT); mark.renderOrder = 996; mark.visible = false;
+      const label = makeLabel();
+      this.G.scene.add(mark, label);
+      const h = { i, ctrl, grip, glove, mark, label, src: null, gp: null, side: '', trig: false, sq: false, evTrig: false, evSq: false,
+        held: null, wheelPrev: 0, tickAcc: 0, hover: null, hoverKey: '' };
+      ctrl.addEventListener('connected', (e) => { h.src = e.data; h.gp = e.data.gamepad || null; h.side = e.data.handedness; this.checkHands(); });
+      ctrl.addEventListener('disconnected', () => { this.release(h); h.src = null; h.gp = null; h.evTrig = h.evSq = false; });
       this.hands.push(h);
     }
+    if (this.G.debug) {
+      this.dbg = makeLabel(768, 256, 0.45);
+      this.dbg.position.set(0, 0.12, -0.05);
+    }
+  }
+
+  // Called when a VR session starts. The browser's own select (trigger) and squeeze (grip)
+  // events are a second, independent way of reading the buttons, alongside polling the gamepad.
+  onSession(session) {
+    const handFor = (src) => this.hands.find((h) => h.src === src) || this.hands.find((h) => h.side && h.side === src.handedness);
+    const on = (type, fn) => session.addEventListener(type, (e) => { const h = handFor(e.inputSource); if (h) fn(h); this.evCount = (this.evCount || 0) + 1; });
+    on('selectstart', (h) => { h.evTrig = true; });
+    on('selectend', (h) => { h.evTrig = false; });
+    on('squeezestart', (h) => { h.evSq = true; });
+    on('squeezeend', (h) => { h.evSq = false; });
+    session.addEventListener('inputsourceschange', () => this.checkHands());
+    if (this.dbg) this.hands[0].grip.add(this.dbg);
+  }
+
+  checkHands() {
+    const s = this.renderer?.xr.getSession();
+    if (s && Array.from(s.inputSources).some((x) => x.hand && !x.gamepad)) this.G.hud.msg('Pick up your controllers to play!', 4);
   }
 
   haptic(h, intensity, ms) {
@@ -94,50 +159,121 @@ export class Player {
 
   handPos(h, out) { return h.grip.getWorldPosition(out); }
 
-  grab(h) {
+  // What could this hand use right now? Returns { kind, it|c, d, point } or null.
+  findTarget(h) {
     const ship = this.G.ship;
     this.handPos(h, _a);
-    let best = null, bd = 0.24, kind = null;
+    let best = null, bs = 1;
+    const consider = (kind, d, r, extra) => { const sc = d / r; if (sc < bs) { bs = sc; best = { kind, d, ...extra }; } };
+    // Second hand on a held musket's fore stock steadies it
+    for (const o of this.hands) {
+      const it = o.held;
+      if (o === h || !it || it.kind !== 'musket' || it.support) continue;
+      _seg.start.set(0, 0, -0.15); _seg.end.set(0, 0, -0.85);
+      it.obj.localToWorld(_seg.start); it.obj.localToWorld(_seg.end);
+      _seg.closestPointToPoint(_a, true, _p);
+      consider('support', _a.distanceTo(_p), 0.3, { it, point: _p.clone() });
+    }
+    if (best) return best;
     for (const it of this.items) {
       if (it.holder || this.deskItem === it) continue;
-      it.obj.getWorldPosition(_b);
-      const d = _a.distanceTo(_b);
-      if (d < bd) { bd = d; best = it; kind = 'item'; }
+      _seg.start.set(0, 0, it.kind === 'sword' ? 0.08 : 0.3); _seg.end.set(0, 0, it.kind === 'sword' ? -0.45 : -0.6);
+      it.obj.localToWorld(_seg.start); it.obj.localToWorld(_seg.end);
+      _seg.closestPointToPoint(_a, true, _p);
+      consider('item', _a.distanceTo(_p), 0.3, { it, point: _p.clone() });
     }
-    if (!best) {
-      _b.copy(_a); ship.wheelBase.worldToLocal(_b);
-      const rr = Math.hypot(_b.x, _b.y);
-      if (Math.abs(rr - 0.58) < 0.24 && Math.abs(_b.z) < 0.3) { kind = 'wheel'; h.wheelPrev = Math.atan2(_b.y, _b.x); }
-      else { ship.leverKnob.getWorldPosition(_c); if (_a.distanceTo(_c) < 0.22) kind = 'lever'; }
+    _b.copy(_a); ship.wheelBase.worldToLocal(_b);
+    const rr = Math.hypot(_b.x, _b.y);
+    if (rr > 0.2 && rr < 0.9 && Math.abs(_b.z) < 0.35) {
+      _c.set(_b.x / rr * 0.58, _b.y / rr * 0.58, 0); ship.wheelBase.localToWorld(_c);
+      consider('wheel', Math.max(Math.abs(rr - 0.58), Math.abs(_b.z)), 0.4, { point: _c.clone() });
     }
-    if (kind === 'item') {
+    ship.leverKnob.getWorldPosition(_c);
+    consider('lever', _a.distanceTo(_c), 0.3, { point: _c.clone() });
+    for (const c of ship.cannons) {
+      _seg.start.set(0, 0.05, 0.7); _seg.end.set(0, 0.05, -0.3);
+      c.elev.localToWorld(_seg.start); c.elev.localToWorld(_seg.end);
+      _seg.closestPointToPoint(_a, true, _p);
+      consider('cannon', _a.distanceTo(_p), 0.6, { c, point: c.breech.getWorldPosition(new THREE.Vector3()) });
+    }
+    return best;
+  }
+
+  grab(h) {
+    const t = this.findTarget(h);
+    if (!t) { this.haptic(h, 0.08, 15); return; }
+    if (t.kind === 'cannon') { this.useCannon(h, t.c); return; }
+    if (t.kind === 'support') {
+      h.held = 'support'; h.supporting = t.it; t.it.support = h; this.haptic(h, 0.3, 30);
+      return;
+    }
+    if (t.kind === 'item') {
+      const best = t.it;
       h.held = best; best.holder = h; best.returning = false; best.hasPrev = false;
-      h.ctrl.add(best.obj); best.obj.position.set(0, -0.01, 0.06); best.obj.quaternion.identity();
+      if (best.kind === 'sword') {
+        // Held like a real sword: blade comes up out of the top of the fist
+        h.grip.add(best.obj); best.obj.position.set(0, 0, 0.02); best.obj.rotation.set(SWORD_TILT, 0, 0);
+      } else { h.ctrl.add(best.obj); best.obj.position.set(0, -0.01, 0.06); best.obj.quaternion.identity(); }
       h.glove.visible = false;
       this.haptic(h, 0.4, 40);
-    } else if (kind) { h.held = kind; this.haptic(h, 0.3, 30); }
+      if (!this.toldItem?.[best.kind]) {
+        this.toldItem = { ...this.toldItem, [best.kind]: true };
+        if (best.kind === 'musket') { this.G.hud.msg('Aim and pull TRIGGER to shoot', 3.5); this.G.hud.msg('Grip the barrel with your other hand to steady it', 4); }
+        else this.G.hud.msg('Swing hard at boarders to cut them down', 4);
+      }
+      return;
+    }
+    if (t.kind === 'wheel') { _b.copy(this.handPos(h, _a)); this.G.ship.wheelBase.worldToLocal(_b); h.wheelPrev = Math.atan2(_b.y, _b.x); }
+    h.held = t.kind; this.haptic(h, 0.3, 30);
+  }
+
+  useCannon(h, c) {
+    const G = this.G;
+    c.breech.getWorldPosition(_b);
+    if (G.ship.lightCannon(c, 0.35)) { G.audio.fuse(_b); this.haptic(h, 0.5, 60); this.cannonsFired = (this.cannonsFired || 0) + 1; G.crew.playerFired?.(); }
+    else if (c.reload > 0) { G.hud.msg('That cannon is still reloading', 1.5); G.audio.click(_b); }
   }
 
   release(h) {
     const it = h.held;
+    if (it === 'support') { if (h.supporting) h.supporting.support = null; h.supporting = null; }
     if (it && typeof it === 'object') {
+      if (it.support) { const o = it.support; it.support = null; o.supporting = null; o.held = null; }
       this.G.ship.root.attach(it.obj); it.holder = null; it.returning = true;
     }
     h.held = null; h.glove.visible = true;
   }
 
   triggerPress(h) {
-    const G = this.G;
     if (h.held && h.held.kind === 'musket') { this.fireMusket(h.held, h); return; }
+    if (h.held === 'support' && h.supporting) { this.fireMusket(h.supporting, h.supporting.holder); return; }
     if (h.held) return;
-    this.handPos(h, _a);
-    for (const c of G.ship.cannons) {
-      c.breech.getWorldPosition(_b);
-      if (_a.distanceTo(_b) < 0.5) {
-        if (G.ship.lightCannon(c, 0.35)) { G.audio.fuse(_b); this.haptic(h, 0.5, 60); }
-        else if (c.reload > 0) { G.hud.msg('That cannon is still reloading', 1.5); G.audio.click(_b); }
-        return;
-      }
+    const t = this.findTarget(h);
+    if (t && t.kind === 'cannon') this.useCannon(h, t.c);
+    else if (t) this.G.hud.msg('Squeeze GRIP (the side button) to grab', 2);
+  }
+
+  // Glowing dot + label on whatever an empty hand could use.
+  updateHover(h) {
+    let t = null;
+    if (!h.held && h.src && !this.dead) t = this.findTarget(h);
+    let text = '';
+    if (t) {
+      if (t.kind === 'support') text = 'GRIP to steady';
+      else if (t.kind === 'item') text = t.it.kind === 'musket' ? 'GRIP to take musket' : 'GRIP to take cutlass';
+      else if (t.kind === 'wheel') text = 'GRIP to steer';
+      else if (t.kind === 'lever') text = 'GRIP and push:\nmore sail';
+      else if (t.kind === 'cannon') text = this.G.ship.cannonReady(t.c) ? 'TRIGGER to fire!' : `Reloading... ${Math.ceil(t.c.reload)}`;
+    }
+    const key = t ? t.kind + (t.it ? t.it.kind + this.items.indexOf(t.it) : '') + (t.c ? this.G.ship.cannons.indexOf(t.c) : '') : '';
+    if (key && key !== h.hoverKey) this.haptic(h, 0.15, 15);
+    h.hoverKey = key;
+    h.mark.visible = h.label.visible = !!t;
+    if (t) {
+      h.mark.position.copy(t.point);
+      h.mark.scale.setScalar(1 + Math.sin(this.G.t * 8) * 0.2);
+      h.label.position.copy(t.point); h.label.position.y += 0.2;
+      h.label.userData.set(text);
     }
   }
 
@@ -154,6 +290,20 @@ export class Player {
       G.camera.getWorldPosition(_c); G.camera.getWorldDirection(_b);
       G.combat.musketShot(_c, _b, _a);
     }
+  }
+
+  // Two hands on a musket: point the barrel from the trigger hand toward the steadying hand.
+  aimTwoHanded(h) {
+    const it = h.held, o = it.support;
+    if (!o) { it.obj.position.set(0, -0.01, 0.06); it.obj.quaternion.identity(); return; }
+    h.ctrl.updateWorldMatrix(true, false);
+    it.obj.position.set(0, -0.01, 0.06);
+    const from = h.ctrl.localToWorld(_a.copy(it.obj.position)), to = this.handPos(o, _b);
+    _c.subVectors(to, from); if (_c.lengthSq() < 0.01) return;
+    _p.set(0, 1, 0).applyQuaternion(h.ctrl.getWorldQuaternion(_q2)); // keep the trigger hand's "up"
+    _m.lookAt(from, to, _p);      // makes -Z point from 'from' to 'to'
+    _q.setFromRotationMatrix(_m);
+    it.obj.quaternion.copy(_q2.invert()).multiply(_q);
   }
 
   updateWheel(h, dt) {
@@ -210,22 +360,39 @@ export class Player {
   }
 
   updateVR(dt) {
+    const session = this.renderer?.xr.getSession();
+    const srcs = session ? Array.from(session.inputSources) : [];
     for (const h of this.hands) {
-      if (!h.gp) continue;
-      const b = h.gp.buttons, ax = h.gp.axes;
-      const trig = !!(b[0] && (b[0].pressed || b[0].value > 0.6)), sq = !!(b[1] && (b[1].pressed || b[1].value > 0.6));
+      // Re-read the input source every frame instead of trusting what we saw at connect time.
+      if (!h.src || !srcs.includes(h.src)) { const s2 = srcs.find((x) => h.side && x.handedness === h.side); if (s2) h.src = s2; }
+      h.gp = h.src?.gamepad || null;
+      const b = h.gp ? h.gp.buttons : [], ax = h.gp ? h.gp.axes : [];
+      const btn = (i) => !!(b[i] && (b[i].pressed || b[i].value > 0.5));
+      const trig = h.evTrig || btn(0), sq = h.evSq || btn(1);
       if (sq && !h.sq) this.grab(h);
       if (!sq && h.sq) this.release(h);
       if (trig && !h.trig) this.triggerPress(h);
       h.trig = trig; h.sq = sq;
+      // Glove clenches and lights up so you can see the buttons are working
+      h.glove.scale.set(1, sq ? 0.7 : 1, sq ? 0.8 : 1);
+      h.glove.userData.palm.material.color.setHex(trig ? 0xc87a3a : sq ? 0x7a5230 : 0x4a2e1a);
+      if (h.held && h.held.kind === 'musket') this.aimTwoHanded(h);
       if (h.held === 'wheel') this.updateWheel(h, dt);
       else if (h.held === 'lever') this.updateLever(h);
+      this.updateHover(h);
+      if (!h.gp) continue;
       const sx = ax.length >= 4 ? ax[2] : ax[0] || 0, sy = ax.length >= 4 ? ax[3] : ax[1] || 0;
       if (h.side === 'left') this.move(sx, sy, dt);
       if (h.side === 'right') {
         if (Math.abs(sx) > 0.7 && !this.snapLatch) { this.snapLatch = true; this.snapTurn(sx > 0 ? -Math.PI / 4 : Math.PI / 4); }
         else if (Math.abs(sx) < 0.3) this.snapLatch = false;
       }
+    }
+    if (this.dbg && (this.dbgT = (this.dbgT || 0) - dt) <= 0) {
+      this.dbgT = 0.2;
+      const f = (h) => { const b = h.gp?.buttons || []; return `${h.side || '?'}: gp ${h.gp ? b.length : 'none'} T${(b[0]?.value ?? 0).toFixed(1)} G${(b[1]?.value ?? 0).toFixed(1)} ev ${h.evTrig ? 'T' : '-'}${h.evSq ? 'G' : '-'}`; };
+      this.dbg.userData.set(`${f(this.hands[0])}\n${f(this.hands[1])}\nsources ${srcs.length} events ${this.evCount || 0}`);
+      this.dbg.visible = true;
     }
   }
 
@@ -315,7 +482,7 @@ export class Player {
   }
 
   respawn() {
-    for (const h of this.hands) this.release(h);
+    for (const h of this.hands) { this.release(h); h.evTrig = h.evSq = false; }
     this.dolly.position.set(0, 0, 6.5); this.dolly.rotation.set(0, 0, 0);
     this.yaw = 0; this.pitch = 0;
     this.health = 100; this.dead = false; this.hurtFlash = 0;

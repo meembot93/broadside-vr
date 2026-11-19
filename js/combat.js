@@ -90,16 +90,16 @@ export class Combat {
       _c.copy(p.g.position).setY(p.g.position.y + 0.2); root.localToWorld(_c);
       _d.copy(p.g.position).setY(p.g.position.y + 1.75); root.localToWorld(_d);
       const r = segSegDist(origin, _e, _c, _d);
-      if (r.d < 0.3 && r.s * MAX < bestT) { bestT = r.s * MAX; hit = onHit; }
+      if (r.d < 0.3 + r.s * MAX * 0.012 && r.s * MAX < bestT) { bestT = r.s * MAX; hit = onHit; } // forgiving: wider the further away
     };
-    for (const b of G.enemies.boarders) if (b.state !== 'dead') testPerson(b.p, G.ship.root, () => G.enemies.killBoarder(b));
-    for (const s of G.enemies.ships) for (const m of s.crew) if (!m.p.dead) testPerson(m.p, s.root, () => { m.p.dead = true; G.audio.thud(_f); });
+    for (const b of G.enemies.boarders) if (b.state !== 'dead') testPerson(b.p, G.ship.root, () => { G.enemies.killBoarder(b); G.audio.thud(_f); G.hud.msg('Got him!', 1.2); });
+    for (const s of G.enemies.ships) for (const m of s.crew) if (!m.p.dead) testPerson(m.p, s.root, () => { m.p.dead = true; G.audio.thud(_f); G.hud.msg('Sharpshooter! One of theirs is down', 1.8); });
     // Hulls: march along the ray
     for (const s of G.enemies.ships) {
       if (!s.alive || s.pos.distanceTo(origin) > MAX + 20) continue;
       for (let t = 1; t < bestT; t += 0.6) {
         _a.copy(origin).addScaledVector(dir, t);
-        if (s.containsWorld(_a, 0)) { bestT = t; hit = () => { s.damage(1.5); G.fx.debris(_f, 4); G.audio.woodHit(_f); if (!s.alive) G.onEnemySunk(s); }; break; }
+        if (s.containsWorld(_a, 0)) { bestT = t; hit = () => { s.damage(3); G.fx.debris(_f, 8); G.audio.woodHit(_f); if (!s.alive) G.onEnemySunk(s); }; break; }
       }
     }
     // Water
