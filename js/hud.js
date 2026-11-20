@@ -113,10 +113,15 @@ export class Hud {
     }
   }
 
+  // A message in front of you. Kept short and few: at most two waiting (older ones are dropped,
+  // the newest news matters most), a message cut short once another is waiting, and a little
+  // gap of nothing between them so the view isn't always covered.
   msg(text, dur = 3.5) {
+    dur = Math.min(3.2, dur * 0.75);
     if (this.cur && this.cur.text === text) { this.curT = Math.max(this.curT, dur * 0.6); return; }
     if (this.queue.some((q) => q.text === text)) return;
     this.queue.push({ text, dur });
+    while (this.queue.length > 2) this.queue.shift();
   }
 
   drawMsg(text) {
@@ -188,10 +193,12 @@ export class Hud {
     this.drawVitals(); this.placeVitals(); this.vitals.visible = !!G.mode;
     this.updateEnemyBars();
 
-    if (!this.cur && this.queue.length) { this.cur = this.queue.shift(); this.curT = this.cur.dur; this.drawMsg(this.cur.text); this.placed = false; }
+    this.gapT = (this.gapT || 0) - dt;
+    if (!this.cur && this.queue.length && this.gapT <= 0) { this.cur = this.queue.shift(); this.curT = this.cur.dur; this.shownT = 0; this.drawMsg(this.cur.text); this.placed = false; }
     if (this.cur) {
-      this.curT -= dt;
-      if (this.curT <= 0) { this.cur = null; this.msgMesh.visible = false; return; }
+      this.curT -= dt; this.shownT += dt;
+      if (this.queue.length && this.shownT > 1.4) this.curT = Math.min(this.curT, 0); // someone's waiting: wrap up
+      if (this.curT <= 0) { this.cur = null; this.msgMesh.visible = false; this.gapT = 0.7; return; }
       // Target spot: 1.6 m ahead of the eyes, a bit low, in ship space
       const cam = G.camera;
       cam.getWorldPosition(_a); cam.getWorldDirection(_b);

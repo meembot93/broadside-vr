@@ -17,6 +17,9 @@
   button:hover{background:#56351d}
   button:disabled{opacity:.4;cursor:default}
   #version{font-size:17px;color:#ffd25a;margin-bottom:6px;text-align:center;padding:0 16px}
+  #turning{margin-top:6px;font-size:17px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px}
+  #turning button{font-size:16px;padding:7px 14px;margin:3px;border-width:1px;opacity:.7}
+  #turning button.on{opacity:1;background:#7a4d22;border-color:#ffd25a;box-shadow:0 0 8px #e8c77a88}
   #weather{margin-top:14px;font-size:17px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px}
   #weather button{font-size:16px;padding:7px 14px;margin:3px;border-width:1px;opacity:.7}
   #weather button.on{opacity:1;background:#7a4d22;border-color:#ffd25a;box-shadow:0 0 8px #e8c77a88}
@@ -48,6 +51,9 @@
   </div>
   <div id="weather"><span>Sail into:&nbsp;</span>
     <button data-wx="day">Fair day</button><button data-wx="night">Night</button><button data-wx="storm">Storm</button><button data-wx="stormNight">Stormy night</button><button data-wx="random">Surprise me</button>
+  </div>
+  <div id="turning"><span>Turning (right stick):&nbsp;</span>
+    <button data-turn="snap">Snap</button><button data-turn="smooth">Smooth</button>
   </div>
   <div id="mp"><span>Play with friends:&nbsp;</span>
     <input id="nameIn" maxlength="14" placeholder="Your name" autocomplete="off">

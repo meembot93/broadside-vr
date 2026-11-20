@@ -3,5 +3,5 @@
 //
 // EVERY change merged to main must bump VERSION by 1 and replace CHANGES with a few
 // words on what that change did (newest first, keep it to 2-4 short items).
-export const VERSION = 31;
-export const CHANGES = ['only Meem\'s own voices', 'computer voices removed'];
+export const VERSION = 32;
+export const CHANGES = ['smooth turning option', 'fewer messages', 'mates show up on the island'];

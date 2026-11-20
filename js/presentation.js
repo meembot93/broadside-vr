@@ -19,6 +19,9 @@ export function wirePresentation(G) {
   const fx = G.fx, audio = G.audio, hud = G.hud;
   const me = G.player;
   const isMe = (pl) => pl === G.player;
+  // How-to tips: only the first time each session
+  const tipped = new Set();
+  const tip = (k, fn) => { if (!tipped.has(k)) { tipped.add(k); fn(); } };
 
   // ---- Cannons ----
   on('fuseLit', ({ pos }) => audio.fuse(pos));
@@ -42,8 +45,7 @@ export function wirePresentation(G) {
     if (item.holder || me.deskItem === item) { item.obj.getWorldPosition(_a); audio.click(_a); }
   });
   on('musketHit', ({ kind, pos }) => {
-    if (kind === 'boarder') { audio.thud(pos); hud.msg('Got him!', 1.2); }
-    else if (kind === 'foe') { audio.thud(pos); hud.msg('Got him!', 1.2); }
+    if (kind === 'boarder' || kind === 'foe') audio.thud(pos);
     else if (kind === 'enemyCrew') { audio.thud(pos); hud.msg('Sharpshooter! One of theirs is down', 1.8); }
     else if (kind === 'hull') { fx.debris(pos, 8); audio.woodHit(pos); }
     else if (kind === 'water') fx.splash(pos, 0.3);
@@ -72,7 +74,7 @@ export function wirePresentation(G) {
   on('boarderSpawned', ({ ship, first }) => {
     audio.swoosh(ship.root.position);
     if (first) hud.msg('Boarders! Grab the sword or a musket!', 4);
-    else hud.msg('More boarders!', 2);
+    
   });
   on('boarderSwing', ({ pos }) => audio.swoosh(pos));
   on('enemyCrewKilled', ({ role, left, cause, boss }) => {
@@ -137,45 +139,39 @@ export function wirePresentation(G) {
   });
   on('anchorDropped', ({ pos }) => {
     audio.splash(pos, 0.8); audio.bell();
-    hud.msg('Let go the anchor!', 3);
-    hud.msg('Stand in the gold ring by the rail to row ashore', 4.5);
-    hud.msg('Take a weapon from the rack first!', 3.5);
+    hud.msg('Anchored! Stand in the gold ring to row ashore', 4);
+    tip('weaponFirst', () => hud.msg('Take a weapon from the rack first', 3));
   });
   on('wentAshore', ({ player, first, pos }) => {
     if (isMe(player)) {
       audio.splash(pos, 0.4);
-      hud.msg('Ashore! Mags and Rosa are with you', 3.5);
-      hud.msg(desk() ? 'Your map is top right: find the X' : 'Your map is on your left wrist: find the X', 4.5);
-      if (!desk()) hud.msg('Let go of a weapon and it hangs on your belt', 4);
-    } else hud.msg(`${player.name || 'A mate'} rowed ashore`, 2.5);
+      tip('map', () => hud.msg(desk() ? 'Your map is top right: find the X' : 'Your map is on your left wrist: find the X', 4));
+      if (!desk()) tip('belt', () => hud.msg('Let go of a weapon and it hangs on your belt', 3.5));
+    }
   });
-  on('wentAboard', ({ player }) => { if (isMe(player)) hud.msg('Back aboard', 2); else hud.msg(`${player.name || 'A mate'} is back aboard`, 2); });
   const meAshore = () => G.island?.ashore(me);
   on('guardsAlerted', ({ pos, first, big }) => {
     audio.cheer(); audio.swoosh(pos);
     if (first && meAshore()) hud.msg(big ? 'The treasure’s guards! Cut them down!' : 'Guards! Fight your way through!', 3);
   });
-  on('guardKilled', ({ left, big }) => { if (!meAshore()) return; if (big) hud.msg('Their brute is down!', 2.5); else if (!left) hud.msg('That’s the last of them!', 2.5); });
+  on('guardKilled', ({ left }) => { if (meAshore() && !left) hud.msg('That’s the last of them!', 2.5); });
   on('treasureGuarded', () => meAshore() && hud.msg('Guards still watch the X. Clear them first!', 3));
-  on('digStarted', ({ pos }) => { hud.msg('Dig, lads, dig!', 3); audio.thud(pos); });
+  on('digStarted', ({ pos }) => { if (meAshore()) hud.msg('Dig, lads, dig!', 2.5); audio.thud(pos); });
   on('chestUnearthed', ({ pos }) => {
     fx.debris(pos, 14); audio.woodHit(pos); G.crew.cheer(); audio.cheer();
-    hud.msg('A chest!', 2.5);
-    if (meAshore()) hud.msg(desk() ? 'Look at it and click to open it' : 'GRIP the lid to open it', 3.5);
+    if (meAshore()) hud.msg(desk() ? 'A chest! Look at it and click to open it' : 'A chest! GRIP the lid to open it', 3.5);
   });
   on('chestOpened', ({ pos }) => {
     for (let i = 0; i < 4; i++) setTimeout(() => fx.firework(pos.clone().add(new THREE.Vector3(0, 1.2 + i * 0.3, 0)), 0xffd060, 18), i * 250);
     audio.bell(); audio.cheer();
-    hud.msg('Pick ONE prize for the ship', 3.5);
-    if (meAshore()) hud.msg(desk() ? 'Look at a card and click' : 'Reach out and GRIP a card', 3.5);
+    if (meAshore()) hud.msg(desk() ? 'Pick ONE prize: look at a card and click' : 'Pick ONE prize: GRIP a card', 3.5);
   });
   on('upgradeChosen', ({ name, level, player }) => {
     G.crew.cheer(); audio.cheer(); audio.bell();
-    hud.msg(`${name}${level > 1 ? ` (x${level})` : ''}!`, 3.5);
-    if (!isMe(player) && player) hud.msg(`${player.name || 'A mate'} chose it`, 2.5);
-    hud.msg('Row back to the ship: the ring by the boat', 4.5);
+    hud.msg(`Prize: ${name}${level > 1 ? ` (x${level})` : ''}!`, 3.5);
+    if (meAshore()) hud.msg('Row back: the gold ring by the boat', 4);
   });
-  on('treasureDone', () => { hud.msg('Weigh anchor!', 2.5); hud.msg('On to the next voyage, and they’ll be tougher', 4); audio.bell(); });
+  on('treasureDone', () => { hud.msg('Weigh anchor! On to the next voyage', 3.5); audio.bell(); });
 
   // ---- Grapples and boarding ----
   on('grappleFired', ({ pos }) => { fx.flash(pos, 0.8); fx.smoke(pos, G.grapples.gunDir(_a), 4, 0.3); audio.musket(pos); audio.swoosh(pos); });
@@ -187,10 +183,9 @@ export function wirePresentation(G) {
     hud.msg(by === 'us' ? 'Lashed alongside! Climb over the rail to board' : 'They’re alongside! You can board them too', 3.5);
   });
   on('grappleReleased', ({ why }) => {
-    if (why === 'cut') hud.msg('Lines cut', 2);
-    else if (why === 'theyCut') hud.msg('They’ve cut their lines and are pulling away', 3);
+    if (why === 'theyCut') hud.msg('They’ve cut their lines and are pulling away', 3);
   });
-  on('playerCrossed', ({ player, home }) => { if (isMe(player)) hud.msg(home ? 'Back aboard our ship' : 'You’re on their deck! Cut them down', 2.5); });
+  on('playerCrossed', ({ player, home }) => { if (isMe(player) && !home) tip('theirDeck', () => hud.msg('You’re on their deck! Cut them down', 2.5)); });
   on('strandedAboard', ({ player }) => { if (isMe(player)) hud.msg('She’s going down! You scramble back aboard', 3); });
   on('prizeTaken', ({ score }) => {
     hud.msg('She’s ours! Prize taken', 3.5); hud.msg('Plundered timber patches our hull', 3);
@@ -205,18 +200,21 @@ export function wirePresentation(G) {
     hud.msg('KABOOM! She’s going to the bottom', 3.5);
     G.crew.cheer(); setTimeout(() => audio.cheer(), 700);
   });
-  on('crewBoards', ({ name }) => hud.msg(`${name} is boarding with you!`, 1.5));
+
   on('prizeScuttled', () => hud.msg('The prize is cut loose and scuttled', 3));
 
   // ---- Our helm and crew ----
   const ORDER_SAY = { hold: 'Holding this course', chase: 'Engaging the enemy', alongside: 'Bringing us alongside', heave: 'Heaving to, sails furled' };
-  on('helmTaken', ({ name, order }) => hud.msg(`${name} has the wheel: ${ORDER_SAY[order]}`, 3.5));
-  on('helmHandedBack', ({ name }) => hud.msg(`${name}: She’s yours, Captain`, 2.5));
+  // (at most every 30 s each: with friends walking about, the wheel changes hands a lot)
+  const every = {}, now = () => performance.now() / 1000;
+  const sometimes = (k, secs, fn) => { if (!(every[k] > now())) { every[k] = now() + secs; fn(); } };
+  on('helmTaken', ({ name, order }) => sometimes('helmTaken', 30, () => hud.msg(`${name} has the wheel: ${ORDER_SAY[order]}`, 3)));
+  on('helmHandedBack', ({ name }) => sometimes('helmBack', 30, () => hud.msg(`${name}: She’s yours, Captain`, 2)));
   on('helmOrder', ({ order, helmsmanSteering, name }) => {
     hud.msg(`Order: ${ORDER_SAY[order]}!`, 2.5);
     if (!helmsmanSteering) hud.msg(`${name} will do it when you leave the wheel`, 3);
   });
-  on('deckCleared', () => hud.msg('Deck cleared!', 2));
+  on('deckCleared', () => hud.msg('Deck cleared!', 1.5));
 
   // ---- Damage and repairs (damage.js) ----
   const desk = () => G.mode === 'desktop';
@@ -233,7 +231,7 @@ export function wirePresentation(G) {
   on('leakHammered', ({ pos }) => { audio.knock(pos); fx.hit(pos); });
   on('leakPatched', ({ pos, left, player }) => {
     audio.knock(pos); fx.debris(pos, 5);
-    if (player) hud.msg(left ? `Leak patched! ${left} more to go` : 'Leak patched!', 2);
+    if (player && !left) hud.msg('Leak patched!', 1.5);
   });
   on('fireStarted', ({ pos }) => {
     fx.flash(pos, 1.2); audio.fuse(pos);
@@ -244,7 +242,7 @@ export function wirePresentation(G) {
   });
   on('fireSpread', () => hud.msg('The fire’s spreading!', 2.5));
   on('fireShrunk', ({ pos }) => { audio.hiss(pos); fx.smoke(pos, _a.set(0, 1, 0), 6, 0.5); });
-  on('fireDoused', ({ pos, left }) => { audio.hiss(pos); fx.smoke(pos, _a.set(0, 1, 0), 10, 0.6); hud.msg(left ? 'That one’s out!' : 'Fire’s out!', 2); });
+  on('fireDoused', ({ pos, left }) => { audio.hiss(pos); fx.smoke(pos, _a.set(0, 1, 0), 10, 0.6); if (!left) hud.msg('Fire’s out!', 1.5); });
   on('bucketFilled', ({ pos }) => { if (pos) { audio.splash(pos, 0.3); fx.splash(pos, 0.12); } });
   on('bucketPoured', ({ from, to, fires }) => {
     if (from) {
@@ -269,7 +267,7 @@ export function wirePresentation(G) {
     hud.msg(player ? `The ${name} is splinted and standing!` : `The crew splinted the ${name}`, 3);
     if (player) { G.crew.cheer(); audio.cheer(); }
   });
-  on('crewRepaired', ({ what }) => { if (what === 'leak') hud.msg('The crew patched a leak', 2); });
+
 
   // ---- Players ----
   on('playerHurt', ({ player }) => {
@@ -284,7 +282,7 @@ export function wirePresentation(G) {
   });
   on('playerRevived', ({ player }) => {
     if (isMe(player)) hud.msg('The crew dragged you back to the helm', 3);
-    else if (player) hud.msg(`${player.name || 'A mate'} is back on their feet`, 2);
+
   });
 
   // ---- Friends (net/net.js) ----
