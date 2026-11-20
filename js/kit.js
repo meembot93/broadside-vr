@@ -6,6 +6,14 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // Faceted, flat-shaded look (like the reference art). Colours come from the vertices.
 export const FLAT = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+// Smooth-shaded version (used for the detailed close-up pirates).
+export const SMOOTH = new THREE.MeshLambertMaterial({ vertexColors: true });
+
+// Detail level for shapes built from now on: 1 = the original low-poly look, 2 = twice the
+// segments around every rounded shape and one more subdivision on balls. people.js sets it
+// while building each level of detail.
+export const QUALITY = { q: 1 };
+export const segs = (n) => (n <= 4 ? n : Math.round(n * QUALITY.q));   // 3- and 4-sided shapes keep their shape
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
 const _c = new THREE.Color();
@@ -32,13 +40,13 @@ export class Kit {
 
   // Shortcuts for the shapes used most.
   box(w, h, d, color, p, r, s) { return this.add(new THREE.BoxGeometry(w, h, d), color, p, r, s); }
-  cyl(rt, rb, h, seg, color, p, r, s) { return this.add(new THREE.CylinderGeometry(rt, rb, h, seg), color, p, r, s); }
-  ball(rad, detail, color, p, r, s) { return this.add(new THREE.IcosahedronGeometry(rad, detail), color, p, r, s); }
+  cyl(rt, rb, h, seg, color, p, r, s) { return this.add(new THREE.CylinderGeometry(rt, rb, h, segs(seg)), color, p, r, s); }
+  ball(rad, detail, color, p, r, s) { return this.add(new THREE.IcosahedronGeometry(rad, Math.min(2, detail + (QUALITY.q > 1 ? 1 : 0))), color, p, r, s); }
 
   // A bent "tube" through a list of points (for guards, straps). Square-ish cross section.
   tube(pts, rad, color, sides = 4) {
     const curve = new THREE.CatmullRomCurve3(pts.map((q) => new THREE.Vector3(...q)), false, 'catmullrom', 0.2);
-    return this.add(new THREE.TubeGeometry(curve, Math.max(4, pts.length * 2), rad, sides, false), color);
+    return this.add(new THREE.TubeGeometry(curve, segs(Math.max(4, pts.length * 2)), rad, segs(sides), false), color);
   }
 
   geometry() {
@@ -124,4 +132,18 @@ export function addMusket(k, s = 1) {
   k.box(0.008, 0.035, 0.012, COL.ironDark, [0, -0.045, 0.01], [0.3, 0, 0]);
   k.tube([[0, -0.03, -0.04], [0, -0.07, -0.02], [0, -0.07, 0.04], [0, -0.04, 0.07]], 0.0055, COL.steelDark, 4);
   return [0.036, -1.07];
+}
+
+// A closed fist gripping something along Z (the hand's origin is the middle of the grip):
+// palm on the inner side, four curled fingers wrapped round, thumb across the front.
+// side: +1 right hand, -1 left. s: size.
+export function addFist(k, color, side, at = [0, -0.635, -0.005], s = 1) {
+  const [x0, y0, z0] = at, inner = side > 0 ? Math.PI : 0;
+  k.box(0.026 * s, 0.085 * s, 0.085 * s, color, [x0 - side * 0.026 * s, y0 + 0.014 * s, z0 + 0.004 * s]);   // palm
+  k.box(0.024 * s, 0.07 * s, 0.08 * s, color, [x0 + side * 0.027 * s, y0 + 0.022 * s, z0 + 0.004 * s]);    // back of the hand
+  for (let i = 0; i < 4; i++) {                                                                               // fingers
+    const g = new THREE.TorusGeometry(0.026 * s, (0.0118 - i * 0.0009) * s, 6, 8, Math.PI * 1.45).rotateZ(inner + Math.PI * 0.275);
+    k.add(g, color, [x0, y0 - i * 0.001 * s, z0 - 0.031 * s + i * 0.021 * s]);
+  }
+  k.cyl(0.0115 * s, 0.0105 * s, 0.05 * s, 6, color, [x0 - side * 0.014 * s, y0 + 0.016 * s, z0 - 0.054 * s], [Math.PI / 2 - 0.35, 0, side * 0.55]);  // thumb
 }

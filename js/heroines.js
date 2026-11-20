@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { vary } from './kit.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { vary, segs, QUALITY, addFist } from './kit.js';
 
 // A curvier, more detailed figure for the two pirate women from Meem's newer turnarounds
 // ('rogue' and 'raider' in people.js). Same faceted, flat-shaded style and the same
@@ -18,7 +19,13 @@ const rAt = (P, y) => {
   return P[P.length - 1][0];
 };
 // (points must run bottom-up for the faces to point outward, so flip a top-down list)
-const lathe = (P, seg = SEG, phi0 = 0) => new THREE.LatheGeometry((P[0][1] > P[P.length - 1][1] ? [...P].reverse() : P).map(([r, y]) => new THREE.Vector2(r, y)), seg, phi0);
+const lathe = (P, seg = SEG, phi0 = 0, phiLen = Math.PI * 2) => new THREE.LatheGeometry((P[0][1] > P[P.length - 1][1] ? [...P].reverse() : P).map(([r, y]) => new THREE.Vector2(r, y)), segs(seg), phi0, phiLen);
+// Smooth normals for a shape whose points were moved (welds the points first).
+function smoothNormals(g) {
+  for (const a of Object.keys(g.attributes)) if (a !== 'position') g.deleteAttribute(a);
+  const m = mergeVertices(g, 1e-5); m.computeVertexNormals(); return m;
+}
+const sphere = (r, w, h, ...rest) => new THREE.SphereGeometry(r, segs(w), segs(h), ...rest);
 const front = (y, dr = 0) => -(rAt(TORSO, y) + dr) * D;   // z of the torso's front at height y
 const mix = (a, b, t) => new THREE.Color(a).lerp(new THREE.Color(b), t).getHex();
 
@@ -59,6 +66,7 @@ export function heroBody(k, c, R) {
   if (!c.shorts) { // bikini cut: the leg openings rise towards the hips
     const p = hips.attributes.position;
     for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (y < 0.8) p.setY(i, y + (0.8 - y) * Math.min(1, Math.abs(p.getX(i)) / 0.2) * 0.75); }
+    hips.computeVertexNormals();
   }
   if (!c.thong) {
     k.add(hips, c.pants, 0, 0, [1, 1, 0.82]);
@@ -70,6 +78,7 @@ export function heroBody(k, c, R) {
     for (const s of [-1, 1]) k.ball(0.128, 1, skin, [s * 0.084, 0.78, 0.062], [0.25, s * -0.2, 0], [1, 1.0, 0.88]);
     const panel = lathe([[0.128, 0.728], [0.2, 0.765], [0.222, 0.81], [0.213, 0.85]], SEG, Math.PI - 0.55, 1.1), pp = panel.attributes.position;
     for (let i = 0; i < pp.count; i++) { const y = pp.getY(i); if (y < 0.82) pp.setY(i, y + (0.82 - y) * Math.min(1, Math.abs(pp.getX(i)) / 0.12) * 0.65); }
+    panel.computeVertexNormals();
     k.add(panel, c.pants, 0, 0, [1, 1, 0.83]);
     k.add(lathe([[0.214, 0.835], [0.21, 0.848]]), c.pants, 0, 0, [1.01, 1, 0.84]);                  // string round the hips
     k.tube([[0, 0.84, 0.17], [0, 0.8, 0.165], [0, 0.76, 0.15], [0, 0.73, 0.11]], 0.009, c.pants, 4);  // and down the back
@@ -90,9 +99,9 @@ export function heroBody(k, c, R) {
           if (z < 0) nz = z * (1 - 0.5 * sm(-0.6, 1.0, y)) * (1 + 0.05 * sm(0.2, -1, y));
           p.setXYZ(i, p.getX(i) * 0.86, BR * y * (1.02 + 0.1 * y), nz);
         }
-        k.add(g, skin, at, rot, BS);
+        k.add(smoothNormals(g), skin, at, rot, BS);
       } else k.ball(BR, 1, skin, at, rot, BS);
-      if (col !== null) k.add(new THREE.SphereGeometry(BR * 1.04, 12, 8, 0, Math.PI * 2, Math.PI * cut, Math.PI * (1 - cut)), col, at, rot, BS);
+      if (col !== null) k.add(sphere(BR * 1.04, 12, 8, 0, Math.PI * 2, Math.PI * cut, Math.PI * (1 - cut)), col, at, rot, BS);
       if (trim !== null) k.add(new THREE.TorusGeometry(BR * 1.04 * Math.sin(Math.PI * cut), 0.009, 3, 14).rotateX(Math.PI / 2).translate(0, BR * 1.04 * Math.cos(Math.PI * cut), 0), trim, at, rot, BS);
     }
     k.box(0.007, BR * 0.85, 0.008, mix(skin, 0x6a3a2a, 0.35), [0, BY + 0.01, bz - BR * 0.58]);   // the shadow between them
@@ -156,7 +165,7 @@ export function heroHead(k, c, R) {
   const fg = new THREE.IcosahedronGeometry(0.12, 2);
   { const p = fg.attributes.position;
     for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (y < 0) { p.setX(i, p.getX(i) * (1 - Math.min(0.38, -y * 2.7))); p.setZ(i, p.getZ(i) * (1 - Math.min(0.12, -y * 0.8))); } } }
-  const face = k.add(fg, skin, [0, 0, 0], 0, [0.95, 1.08, 0.98]);
+  const face = k.add(smoothNormals(fg), skin, [0, 0, 0], 0, [0.95, 1.08, 0.98]);
   { const p = face.attributes.position, col = face.attributes.color;   // soft bounce light under the chin
     for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (y < 0) { const f = 1 + Math.min(0.5, -y * 4); col.setXYZ(i, col.getX(i) * f, col.getY(i) * f, col.getZ(i) * f); } } }
   // Cheeks: a touch of warmth
@@ -187,7 +196,7 @@ export function heroHead(k, c, R) {
   }
 
   // Hair: back and sides, side-swept bangs, locks framing the face
-  k.add(new THREE.SphereGeometry(0.129, 10, 6, -0.45, Math.PI + 0.9, 0, Math.PI * 0.64), hair, [0, 0.005, 0.004], 0, [1.04, 1.1, 1.05]);
+  k.add(sphere(0.129, 10, 6, -0.45, Math.PI + 0.9, 0, Math.PI * 0.64), hair, [0, 0.005, 0.004], 0, [1.04, 1.1, 1.05]);
   k.box(0.12, 0.034, 0.03, hair, [0.025, 0.066, -0.104], [-0.35, 0.05, -0.3]);
   k.box(0.08, 0.03, 0.03, vary(hair, 0.1, () => 0.9), [-0.055, 0.066, -0.1], [-0.35, -0.2, 0.45]);
   for (const s of [-1, 1]) {
@@ -203,10 +212,10 @@ export function heroHead(k, c, R) {
     plait(k, hair, [[x, y - 0.03, z], [x, y - 0.06, z - 0.003], [x, y - 0.085, z - 0.005]], 0.02, 0.012);   // tuft
   };
   if (c.hairStyle === 'twinbraids') { braid(1, 1.2); braid(-1, 1.2); }
-  else { braid(c.hairStyle === 'leftbraid' ? -1 : 1, 1.1); k.add(new THREE.SphereGeometry(0.1, 8, 4, 0, Math.PI * 2, Math.PI * 0.35, Math.PI * 0.3), hair, [0, -0.05, 0.035], 0, [1.05, 1, 1.05]); }
+  else { braid(c.hairStyle === 'leftbraid' ? -1 : 1, 1.1); k.add(sphere(0.1, 8, 4, 0, Math.PI * 2, Math.PI * 0.35, Math.PI * 0.3), hair, [0, -0.05, 0.035], 0, [1.05, 1, 1.05]); }
 
   // Bandana: a cap that sits high at the front and low at the back, knotted at the nape
-  const cap = new THREE.SphereGeometry(0.136, 12, 4, 0, Math.PI * 2, 0, Math.PI * 0.5);
+  const cap = sphere(0.136, 12, 4, 0, Math.PI * 2, 0, Math.PI * 0.5);
   k.add(cap, c.bandana, [0, 0.022, 0.006], [0.38, 0, 0], [1.0, 1.04, 1.06]);
   k.add(new THREE.TorusGeometry(0.135, 0.012, 3, 14), vary(c.bandana, 0.15, R), [0, 0.022, 0.006], [Math.PI / 2 + 0.38, 0, 0], [1.0, 1.06, 1]);  // rolled edge
   k.ball(0.036, 0, c.bandana, [0, -0.03, 0.135]);
@@ -230,9 +239,9 @@ export function heroArm(k, c, side) {
   const skin = c.skin;
   if (c.top === 'blouse') {          // puffed off-shoulder sleeve
     k.ball(0.082, 1, c.shirt, [0, -0.05, 0], 0, [1.08, 0.92, 1.08]);
-    k.cyl(0.062, 0.064, 0.022, 8, vary(c.shirt, 0.05, Math.random), [0, -0.122, 0]);
+    k.cyl(0.062, 0.064, 0.022, 8, vary(c.shirt, 0.05, c.rnd), [0, -0.122, 0]);
   } else {
-    k.add(new THREE.SphereGeometry(0.052, 8, 6), skin, [0, -0.03, 0], 0, [1, 1.25, 1]);
+    k.add(sphere(0.052, 8, 6), skin, [0, -0.03, 0], 0, [1, 1.25, 1]);
     if (c.armband !== undefined) {
       k.cyl(0.058, 0.057, 0.05, 8, c.armband, [0, -0.1, 0]);
       for (const y of [-0.072, -0.128]) k.cyl(0.062, 0.062, 0.009, 8, FRILL, [0, y, 0]);
@@ -240,8 +249,11 @@ export function heroArm(k, c, side) {
   }
   k.cyl(0.049, 0.043, 0.28, 7, skin, [0, -0.18, 0]);
   k.cyl(0.042, 0.033, 0.26, 7, skin, [0, -0.44, 0]);
-  k.box(0.046, 0.075, 0.06, skin, [0, -0.62, -0.005]);                          // hand
-  k.box(0.022, 0.04, 0.024, skin, [side * -0.028, -0.6, -0.035], [0, 0, side * 0.3]); // thumb
+  if (QUALITY.q > 1) addFist(k, skin, side, [0, -0.635, -0.005], 0.88);
+  else {
+    k.box(0.046, 0.075, 0.06, skin, [0, -0.62, -0.005]);                          // hand
+    k.box(0.022, 0.04, 0.024, skin, [side * -0.028, -0.6, -0.035], [0, 0, side * 0.3]); // thumb
+  }
 }
 
 // ---------------------------------------------------------------- legs

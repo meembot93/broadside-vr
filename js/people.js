@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Kit, FLAT, vary, addCutlass } from './kit.js';
+import { Kit, FLAT, SMOOTH, QUALITY, segs, vary, addCutlass, addFist } from './kit.js';
 import { heroBody, heroHead, heroArm, heroLeg, HERO_ARM_X, HERO_LEG_X, HERO_HEAD_SCALE } from './heroines.js';
 
 // Pirates in the style of the reference art: stocky, faceted low-poly shapes with flat
@@ -30,14 +30,15 @@ function profileR(P, y) {
   for (let i = 1; i < P.length; i++) if (y <= P[i][1]) { const [r0, y0] = P[i - 1], [r1, y1] = P[i]; return r0 + (r1 - r0) * (y - y0) / Math.max(1e-6, y1 - y0); }
   return P[P.length - 1][0];
 }
-const lathe = (profile, seg, phiStart, phiLen) => new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), seg, phiStart, phiLen);
+const lathe = (profile, seg, phiStart, phiLen) => new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), segs(seg), phiStart, phiLen);
+const sphere = (r, w, h, ...rest) => new THREE.SphereGeometry(r, segs(w), segs(h), ...rest);
 const grow = (P, dr) => P.map(([r, y]) => [r + dr, y]);
 
 // An open-fronted garment (vest or coat) around the torso, with an optional ragged hem
 // and gold trim down the front edges and round the hem.
 function garment(k, P, color, gap, R, { ragged = 0, trim = null, seg = 14 } = {}) {
   const g = lathe(P, seg, Math.PI + gap / 2, Math.PI * 2 - gap), pos = g.attributes.position, yMin = P[0][1];
-  if (ragged) for (let i = 0; i < pos.count; i++) if (pos.getY(i) < yMin + 0.01) pos.setY(i, yMin - (i % 2) * ragged * (0.4 + R()));
+  if (ragged) { for (let i = 0; i < pos.count; i++) if (pos.getY(i) < yMin + 0.01) pos.setY(i, yMin - (i % 2) * ragged * (0.4 + R())); g.computeVertexNormals(); }
   k.add(g, color, 0, 0, [1, 1, DEPTH]);
   if (!trim) return;
   for (const s of [-1, 1]) {           // front edges, segment by segment along the profile
@@ -59,14 +60,15 @@ function garment(k, P, color, gap, R, { ragged = 0, trim = null, seg = 14 } = {}
 
 function buildBody(k, c, R) {
   const T = c.belly ? TORSO.map(([r, y]) => [r + (y > 0.9 && y < 1.3 ? 0.035 : 0), y]) : TORSO;
-  const zf = (y) => -profileR(T, y) * DEPTH * 0.924;
+  const n = segs(8), zf = (y) => -profileR(T, y) * DEPTH * Math.cos(Math.PI / n);   // the torso has a flat face at the front
   // Hips and trousers top
   k.cyl(0.2, 0.19, 0.18, 8, c.pants, [0, 0.8, 0], 0, [1, 1, 0.82]);
   // Shirt (off-white, open V at the neck shows skin)
-  k.add(lathe(T, 8, Math.PI / 8), c.shirt, 0, 0, [1, 1, DEPTH]);   // flat face at the front
+  k.add(lathe(T, 8, Math.PI / n), c.shirt, 0, 0, [1, 1, DEPTH]);   // flat face at the front
   if (c.ragged) { // torn shirt hem hanging below the sash
     const h = lathe([[0.215, 0.83], [0.212, 0.9]], 10), p = h.attributes.position;
     for (let i = 0; i < p.count; i++) if (p.getY(i) < 0.84) p.setY(i, 0.8 - (i % 2) * 0.05 * R());
+    h.computeVertexNormals();
     k.add(h, c.shirt, 0, 0, [1, 1, DEPTH]);
   }
   // The V of bare chest: a strip that follows the chest's curve, narrowing to a point
@@ -144,14 +146,14 @@ function buildHead(k, c, R) {
     k.add(new THREE.TorusGeometry(0.128, 0.0055, 3, 16), 0x141414, [0, 0.03, 0.002], [Math.PI / 2, patchSide * -0.32, 0], [0.96, 1.04, 1]);
   }
   // Hair at the back and sides; long styles add braids or a ponytail
-  k.add(new THREE.SphereGeometry(0.131, 8, 4, 0, Math.PI, Math.PI * 0.25, Math.PI * (c.female ? 0.55 : 0.42)), hair, [0, 0, 0], 0, [0.97, 1.1, 1.0]);
+  k.add(sphere(0.131, 8, 4, 0, Math.PI, Math.PI * 0.25, Math.PI * (c.female ? 0.55 : 0.42)), hair, [0, 0, 0], 0, [0.97, 1.1, 1.0]);
   if (c.hairStyle === 'braids') for (const s of [-1, 1]) {
     hairChain(k, hair, [[s * 0.1, -0.06, 0.02], [s * 0.12, -0.14, 0.0], [s * 0.13, -0.22, -0.02], [s * 0.135, -0.3, -0.04], [s * 0.135, -0.37, -0.05]], 0.034, 0.022);
   }
   if (c.hairStyle === 'ponytail') hairChain(k, hair, [[0, 0.0, 0.13], [0, -0.08, 0.15], [0, -0.17, 0.15], [0, -0.26, 0.14], [0, -0.33, 0.13]], 0.045, 0.025);
   if (c.hairStyle === 'braid') hairChain(k, hair, [[0, -0.03, 0.12], [0, -0.11, 0.135], [0, -0.19, 0.14], [0, -0.27, 0.14], [0, -0.35, 0.135], [0, -0.42, 0.13]], 0.035, 0.024);
   // Facial hair
-  const lowerFace = (r, t0, t1) => new THREE.SphereGeometry(r, 9, 3, Math.PI - 0.25, Math.PI + 0.5, Math.PI * t0, Math.PI * t1);
+  const lowerFace = (r, t0, t1) => sphere(r, 9, 3, Math.PI - 0.25, Math.PI + 0.5, Math.PI * t0, Math.PI * t1);
   if (c.beard === 'full' || c.beard === 'big') {
     const big = c.beard === 'big';
     k.add(lowerFace(0.133, 0.55, 0.42), hair, [0, 0, 0], 0, [0.96, 1.1, 1.02]);
@@ -185,14 +187,14 @@ function buildHead(k, c, R) {
     const bands = 4;
     for (let i = 0; i < bands; i++) {
       const col = c.stripe !== undefined && i % 2 ? c.stripe : c.bandana;
-      k.add(new THREE.SphereGeometry(0.136, 8, 1, 0, Math.PI * 2, Math.PI * 0.5 * i / bands, Math.PI * 0.5 / bands), col, [0, 0.03, 0.0], 0, [0.97, 1.0, 1.03]);
+      k.add(sphere(0.136, 8, 1, 0, Math.PI * 2, Math.PI * 0.5 * i / bands, Math.PI * 0.5 / bands), col, [0, 0.03, 0.0], 0, [0.97, 1.0, 1.03]);
     }
     k.cyl(0.137, 0.137, 0.03, 10, vary(c.bandana, 0.2, R), [0, 0.045, 0], 0, [0.97, 1, 1.03]);
     k.ball(0.03, 0, c.bandana, [0.04, 0.0, 0.135]);
     k.box(0.04, 0.12, 0.012, c.bandana, [0.03, -0.06, 0.14], [0.2, 0, 0.25]);
     k.box(0.04, 0.1, 0.012, c.stripe ?? c.bandana, [0.065, -0.05, 0.135], [0.25, 0, -0.15]);
   } else {
-    k.add(new THREE.SphereGeometry(0.133, 8, 3, 0, Math.PI * 2, 0, Math.PI * 0.32), hair, [0, 0.0, 0.0], 0, [0.97, 1.1, 1.02]);
+    k.add(sphere(0.133, 8, 3, 0, Math.PI * 2, 0, Math.PI * 0.32), hair, [0, 0.0, 0.0], 0, [0.97, 1.1, 1.02]);
   }
 }
 
@@ -211,11 +213,14 @@ function buildArm(k, c, side, cutlass) {
   } else {                         // rolled sleeves
     k.ball(0.074, 0, c.shirt, [0, -0.03, 0]);
     k.cyl(0.08, 0.07, 0.3, 7, c.shirt, [0, -0.17, 0]);
-    k.cyl(0.082, 0.078, 0.08, 7, vary(c.shirt, 0.07, Math.random), [0, -0.33, 0]);
+    k.cyl(0.082, 0.078, 0.08, 7, vary(c.shirt, 0.07, c.rnd), [0, -0.33, 0]);
     k.cyl(0.062, 0.05, 0.25, 6, c.skin, [0, -0.47, 0]);
   }
-  k.box(0.072, 0.1, 0.085, c.skin, [0, -0.635, -0.005]);                     // fist
-  k.box(0.03, 0.05, 0.03, c.skin, [side * -0.035, -0.61, -0.045], [0, 0, side * 0.3]); // thumb
+  if (QUALITY.q > 1) addFist(k, c.skin, side, [0, -0.635, -0.005], 1.15);
+  else {
+    k.box(0.072, 0.1, 0.085, c.skin, [0, -0.635, -0.005]);                     // fist
+    k.box(0.03, 0.05, 0.03, c.skin, [side * -0.035, -0.61, -0.045], [0, 0, side * 0.3]); // thumb
+  }
   if (cutlass) addCutlass(k, 0.66, [0, -0.635, -0.005]);
 }
 
@@ -230,13 +235,14 @@ function buildLeg(k, c, style) {
   if (style === 'bare') {          // cropped, ragged trousers and bare feet
     const t = lathe([[0.084, -0.46], [0.1, 0.0]], 8), p = t.attributes.position;
     for (let i = 0; i < p.count; i++) if (p.getY(i) < -0.45) p.setY(i, -0.46 - (i % 2) * 0.05);
+    t.computeVertexNormals();
     k.add(t, c.pants);
     k.cyl(0.062, 0.05, 0.36, 6, c.skin, [0, -0.62, 0]);
     k.box(0.1, 0.06, 0.22, c.skin, [0, -0.785, -0.05]);
     return;
   }
   k.cyl(0.1, 0.084, 0.5, 7, c.pants, [0, -0.24, 0]);
-  k.cyl(0.104, 0.098, 0.13, 7, vary(c.boots, 0.1, Math.random), [0, -0.46, 0]);  // turned-down cuff
+  k.cyl(0.104, 0.098, 0.13, 7, vary(c.boots, 0.1, c.rnd), [0, -0.46, 0]);  // turned-down cuff
   k.cyl(0.086, 0.08, 0.28, 7, c.boots, [0, -0.62, 0]);
   k.box(0.12, 0.09, 0.23, c.boots, [0, -0.77, -0.045]);
   k.box(0.13, 0.024, 0.245, 0x1e1712, [0, -0.81, -0.045]);
@@ -269,6 +275,11 @@ export const PIRATE_TYPES = Object.keys(TYPES);
 //  hat: tricorn colour; bandana: bandana colour
 //  beard: a colour (full beard) or 'full' | 'big' | 'goatee' | 'stubble' | 'none'
 //  patch: eye patch; cutlass: carries one; seed: number for a repeatable look
+// Close-up detail: 2 = smooth and twice as round (with real fists) within LOD_DIST metres,
+// the original low-poly pirate beyond. Set PERSON_DETAIL to 1 to use only the low-poly one.
+export const PERSON_DETAIL = 2;
+const LOD_DIST = 9;
+
 export function makePerson(o = {}) {
   const R = rng(o.seed ?? Math.floor(Math.random() * 1e9));
   const pick = (a) => a[Math.floor(R() * a.length)];
@@ -300,26 +311,42 @@ export function makePerson(o = {}) {
   const body = new THREE.Group(); g.add(body);
   const bulk = (c.bulk ?? (c.female ? 0.88 : 1)) * (0.96 + R() * 0.08);
   body.scale.set(bulk, (c.female ? 0.95 : 0.97) + R() * 0.05, bulk);
-  let k = new Kit(); (c.curvy ? heroBody : buildBody)(k, c, R); body.add(k.mesh());
   const head = new THREE.Group(); head.position.y = 1.72; body.add(head);
   if (bulk > 1.05) head.scale.setScalar(1 / Math.sqrt(bulk));
   if (c.curvy) head.scale.setScalar(HERO_HEAD_SCALE);
-  k = new Kit(); (c.curvy ? heroHead : buildHead)(k, c, R); head.add(k.mesh());
   const lx = c.curvy ? HERO_LEG_X : 0.11, ax = c.curvy ? HERO_ARM_X : 0.305, ay = c.curvy ? 1.41 : 1.45;
   const legL = new THREE.Group(); legL.position.set(-lx, 0.82, 0);
   const legR = new THREE.Group(); legR.position.set(lx, 0.82, 0);
-  k = new Kit(); if (c.curvy) heroLeg(k, c); else buildLeg(k, c, c.legs === 'peg' ? 'boot' : c.legs); const legGeo = k.geometry();
-  legL.add(new THREE.Mesh(legGeo, FLAT));
-  if (c.legs === 'peg') { k = new Kit(); buildLeg(k, c, 'peg'); legR.add(k.mesh()); } else legR.add(new THREE.Mesh(legGeo, FLAT));
-  body.add(legL, legR);
   const armL = new THREE.Group(); armL.position.set(-ax, ay, 0);
   const armR = new THREE.Group(); armR.position.set(ax, ay, 0);
-  const arm = c.curvy ? heroArm : buildArm;
-  k = new Kit(); arm(k, c, -1, false); armL.add(k.mesh());
-  k = new Kit(); arm(k, c, 1, false); armR.add(k.mesh());
+  body.add(legL, legR, armL, armR);
+
+  // Each body part is built twice: detailed and smooth for close up, the original low-poly
+  // version for far away. three.js shows one or the other by distance (LOD), so a crowd of
+  // distant pirates costs no more than before. The same seeds make both levels match.
+  const seed2 = R() * 1e9;
+  const level = (q) => {
+    QUALITY.q = q;
+    const Rb = rng(seed2), mat = q > 1 ? SMOOTH : FLAT; c.rnd = rng(seed2 + 7);
+    const out = {};
+    let k = new Kit(); (c.curvy ? heroBody : buildBody)(k, c, Rb); out.body = k.mesh(mat);
+    k = new Kit(); (c.curvy ? heroHead : buildHead)(k, c, Rb); out.head = k.mesh(mat);
+    k = new Kit(); if (c.curvy) heroLeg(k, c); else buildLeg(k, c, c.legs === 'peg' ? 'boot' : c.legs);
+    const legGeo = k.geometry(); out.legL = new THREE.Mesh(legGeo, mat);
+    if (c.legs === 'peg') { k = new Kit(); buildLeg(k, c, 'peg'); out.legR = k.mesh(mat); } else out.legR = new THREE.Mesh(legGeo, mat);
+    const arm = c.curvy ? heroArm : buildArm;
+    k = new Kit(); arm(k, c, -1, false); out.armL = k.mesh(mat);
+    k = new Kit(); arm(k, c, 1, false); out.armR = k.mesh(mat);
+    QUALITY.q = 1;
+    return out;
+  };
+  const hi = level(PERSON_DETAIL), lo = level(1);
+  for (const [name, grp] of [['body', body], ['head', head], ['legL', legL], ['legR', legR], ['armL', armL], ['armR', armR]]) {
+    if (PERSON_DETAIL === 1) { grp.add(lo[name]); continue; }
+    const lod = new THREE.LOD(); lod.addLevel(hi[name], 0); lod.addLevel(lo[name], LOD_DIST); grp.add(lod);
+  }
   // The cutlass is its own mesh so it can be drawn (shown) when a fight starts
-  k = new Kit(); addCutlass(k, 0.66, [0, -0.635, -0.005]); const sword = k.mesh(); sword.visible = !!o.cutlass; armR.add(sword);
-  body.add(armL, armR);
+  const k = new Kit(); addCutlass(k, 0.66, [0, -0.635, -0.005]); const sword = k.mesh(); sword.visible = !!o.cutlass; armR.add(sword);
   armL.rotation.z = -0.1; armR.rotation.z = 0.1;
   return { g, body, legL, legR, armL, armR, head, sword, type, phase: Math.random() * 6, attack: -1, cheer: 0, pose: null, dead: false, deadT: 0, lookT: 0 };
 }
