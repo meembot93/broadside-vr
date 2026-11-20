@@ -1,9 +1,12 @@
-// Treasure hunts: after every voyage won, a gold light marks treasure buried on the islet.
-// Sail there and the ship drops anchor; climb down the rope ladder into the longboat and row
-// for the beach (rowboat.js), with two of the crew. Your map is on your left wrist (top right
-// on desktop). Island guards stand between the beach and the X. Beat them, the crew digs up
-// a chest, open it and pick one of three upgrades for the ship. Row back, climb aboard and the
-// next, harder voyage begins.
+// Treasure hunts: after every voyage won, a gold light marks treasure buried in the ruined
+// temple on top of Treasure Island, out past the cove mouth (land.js shapes it, isle.js
+// dresses it). Sail to the anchorage off its beach and the ship drops anchor; climb down the
+// rope ladder into the longboat and row for the beach (rowboat.js) with two of the crew.
+// Your map is on your left wrist (top right on desktop). Follow the trail up through the
+// jungle: pirates at their camp, an ambush with sharpshooters, skeletons rising from an old
+// graveyard, a boulder rolled down the steep climb, and the temple guards with their brute.
+// The crew digs up the chest at the X; open it and pick one of three upgrades for the ship.
+// Back down to the boat, row out, climb aboard, and the next, harder voyage begins.
 //
 // Rules (host only): update(), act() (called from actions.js), the guards and the shore crew.
 // Looks (every headset): view(), the map, the beam, rings, chest and cards.
@@ -13,11 +16,14 @@
 // player.ship === G.island.shore, so poses, actions and sword hits work like on any deck.
 //
 // Events: treasureMarked, anchorDropped, wentAshore, boardedBoat, wentAboard, boatCastOff,
-//   boatBeached, boatMoored, guardsAlerted, treasureGuarded, digStarted, chestUnearthed,
-//   chestOpened, upgradeChosen, treasureDone
+//   boatBeached, boatMoored, guardsAlerted, skeletonsRise, boulderLoosed, boulderHit,
+//   boulderSmashed, treasureGuarded, digStarted, chestUnearthed, chestOpened, upgradeChosen,
+//   treasureDone (and musketShot for the sharpshooters)
 import * as THREE from 'three';
-import { landHeight, ISLET, ISLET_SOLIDS } from './land.js';
+import { landHeight, ISLE, isleWalkable, isleClearing, islePath, islePathAt, rockGeometry } from './land.js';
 import { makePerson, animatePerson, facePerson } from './people.js';
+import { makeSkeleton, giveMusket } from './foes.js';
+import { IsleLooks, drawIsleMap } from './isle.js';
 import { ENEMY_LOOKS } from './enemies.js';
 import { Kit } from './kit.js';
 import { hullX, STERN, BOW } from './ship.js';
@@ -36,8 +42,21 @@ const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3
 const r2 = (v) => Math.round(v * 100) / 100;
 const flat = (a, x, z) => Math.hypot(a.x - x, a.z - z);
 const ground = (x, z) => Math.max(0, landHeight(x, z));
-const walkable = (x, z, pad = 0.3) => landHeight(x, z) > 0.15 && Math.hypot(x - ISLET.x, z - ISLET.z) < ISLET.r * 1.5 &&
-  !ISLET_SOLIDS.some((o) => (x - o.x) ** 2 + (z - o.z) ** 2 < (o.r + pad) ** 2); // not inside a rock or a palm
+const walkable = isleWalkable; // on the trail, in a clearing or on the landing beach (land.js)
+// Where the ship anchors: off the landing beach, facing the cove
+const ANCHORAGE = { x: ISLE.x + 4, z: ISLE.z + 200 };
+// Who waits where along the trail. A group only appears when someone ashore comes near it.
+const ENCOUNTERS = [
+  { id: 'camp', foes: [['cutlass', 2], ['musket', 1]], extra: 'cutlass' },
+  { id: 'ambush', foes: [['cutlass', 2], ['musket', 2]], extra: 'musket' },
+  { id: 'graves', foes: [['skeleton', 5]], extra: 'skeleton' },
+  { id: 'temple', foes: [['brute', 1], ['cutlass', 2], ['musket', 1]], extra: 'cutlass' },
+];
+const FOE = { // hit points, walking speed, sword damage
+  cutlass: { hp: 2, speed: 2.0, dmg: 10 }, brute: { hp: 5, speed: 1.7, dmg: 14 },
+  musket: { hp: 2, speed: 1.8, dmg: 8 }, skeleton: { hp: 1, speed: 1.8, dmg: 7 },
+};
+const BOULDER_R = 1.15;
 
 const BEAM_MAT = new THREE.MeshBasicMaterial({ color: 0xffd25a, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
 const BRONZE = new THREE.MeshLambertMaterial({ color: 0xa8692a, emissive: 0x2a1404 });
@@ -100,7 +119,10 @@ export class Island {
     this.mapT = 0;
     this.looks = '';
     this.walkable = walkable;
+    this.isle = new IsleLooks(G);
     this.boat = new Rowboat(G, this);
+    this.woken = new Set(); // encounters that have appeared
+    this.boulder = { state: 'set', s: 0, v: 0, t: 0, hit: new Set() }; // set -> loosed -> rolling -> done
     this.frames = new Map(); // player id -> the frame they were in (to notice landings)
     this.buildMap();
   }
@@ -114,74 +136,79 @@ export class Island {
   shoreCrew() { return this.G.crew.members.filter((m) => SHORE_CREW.includes(m.name)); }
 
   // ================= RULES (host) =================
-  // A voyage was won: bury a treasure on the far side of the islet and light the way.
+  // A voyage was won: the treasure's in the temple on top of the island. Light the way.
   start(level) {
-    const G = this.G, S = G.ship;
+    const G = this.G, c = isleClearing('temple'), P = islePath().pts, ent = P[Math.max(0, P.length - 18)];
     this.level = level; this.phase = 'sail'; this.anchored = false;
     this.chest = { state: 'buried', t: 0 };
-    let dx = S.pos.x - ISLET.x, dz = S.pos.z - ISLET.z; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
-    let xx = ISLET.x, xz = ISLET.z;
-    for (let i = 0; i < 60; i++) {
-      const a = Math.atan2(-dx, -dz) + rand(-1, 1), rr = rand(0.3, 0.6) * ISLET.r;
-      const x = ISLET.x + Math.sin(a) * rr, z = ISLET.z + Math.cos(a) * rr;
-      const h = landHeight(x, z), slope = Math.max(...[[1.5, 0], [-1.5, 0], [0, 1.5], [0, -1.5]].map(([ox, oz]) => Math.abs(landHeight(x + ox, z + oz) - h))) / 1.5;
-      if (h > 1.5 && slope < (i < 50 ? 0.3 : 0.6)) { xx = x; xz = z; break; } // fairly flat ground, so the chest sits level
-    }
-    this.site = { xx: r2(xx), xz: r2(xz) };
-    G.events.emit('treasureMarked', { voyage: level, pos: new THREE.Vector3(xx, ground(xx, xz), xz) });
+    this.woken = new Set(); this.boulder = { state: 'set', s: 0, v: 0, t: 0, hit: new Set() };
+    this.site = { xx: r2(c.x), xz: r2(c.z), yaw: r2(Math.atan2(ent.u + ISLE.x - c.x, ent.v + ISLE.z - c.z)) };
+    G.events.emit('treasureMarked', { voyage: level, pos: new THREE.Vector3(c.x, ground(c.x, c.z), c.z) });
   }
 
   // Where Hawkins should sail to (or null)
-  seaTarget() { return this.phase === 'sail' ? { x: ISLET.x, z: ISLET.z } : null; }
+  seaTarget() { return this.phase === 'sail' ? ANCHORAGE : null; }
 
-  // The ship is close: drop anchor and pick the beach facing her.
+  // At the anchorage: drop anchor, and the boat makes for the start of the trail
   dropAnchor() {
-    const G = this.G, S = G.ship, I = ISLET;
-    let dx = S.pos.x - I.x, dz = S.pos.z - I.z; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
-    let r = 0; while (r < 150 && landHeight(I.x + dx * r, I.z + dz * r) > -0.2) r += 0.5;
-    let lr = r; while (lr > 2 && landHeight(I.x + dx * lr, I.z + dz * lr) < 0.7) lr -= 0.5;
-    Object.assign(this.site, { lx: r2(I.x + dx * lr), lz: r2(I.z + dz * lr), bx: r2(I.x + dx * (r + 1.2)), bz: r2(I.z + dz * (r + 1.2)), yaw: r2(Math.atan2(dx, dz)) });
+    const G = this.G, S = G.ship, land = islePathAt(9), a = islePathAt(4), b = islePathAt(14);
+    Object.assign(this.site, { lx: r2(land.x), lz: r2(land.z), lyaw: r2(Math.atan2(-(b.x - a.x), -(b.z - a.z))) });
     S.anchored = true; this.anchored = true; this.phase = 'hunt';
-    // The ladder goes over the side facing the island, with the boat tied up below it
+    // The ladder goes over the side facing the beach, with the boat tied up below it
     S.root.updateMatrixWorld(true);
-    const side = S.root.worldToLocal(_a.set(I.x, 0, I.z)).x >= 0 ? 1 : -1;
+    const side = S.root.worldToLocal(_a.set(land.x, 0, land.z)).x >= 0 ? 1 : -1;
     this.boat.launch(side);
-    this.spawnGuards();
+    for (const f of this.foes) f.p.g.removeFromParent();
+    this.foes = [];
     G.events.emit('anchorDropped', { pos: S.pos.clone() });
   }
 
-  // Guards: a group halfway along the way in, a bigger one around the X with a brute among them.
-  spawnGuards() {
-    const G = this.G, s = this.site, extra = Math.min(3, this.level - 1) + Math.max(0, G.players.length - 1);
-    for (const f of this.foes) f.p.g.removeFromParent();
-    this.foes = [];
-    const mx = (s.lx + s.xx) / 2, mz = (s.lz + s.xz) / 2;
-    const groups = [{ x: mx, z: mz, n: 2 + Math.floor(extra / 2), g: 0 }, { x: s.xx, z: s.xz, n: 2 + Math.ceil(extra / 2), g: 1, big: true }];
-    for (const grp of groups) {
-      for (let i = 0; i < grp.n + (grp.big ? 1 : 0); i++) {
-        let x = grp.x, z = grp.z;
-        for (let k = 0; k < 30; k++) { const a = rand(0, 6.28), d = rand(2.5, 6); x = grp.x + Math.sin(a) * d; z = grp.z + Math.cos(a) * d; if (walkable(x, z)) break; }
-        const big = grp.big && i === 0;
+  // A group along the trail appears when someone ashore gets within 75 m of it
+  wakeEncounters() {
+    const G = this.G, ashore = this.playersAshore();
+    ENCOUNTERS.forEach((E, gi) => {
+      if (this.woken.has(E.id)) return;
+      const c = isleClearing(E.id);
+      if (!ashore.some((pl) => flat(pl.headLocal, c.x, c.z) < 75)) return;
+      this.woken.add(E.id);
+      const extra = Math.min(3, this.level - 1) + Math.max(0, G.players.length - 1);
+      const list = [];
+      for (const [kind, n] of E.foes) for (let i = 0; i < n; i++) list.push(kind);
+      for (let i = 0; i < Math.ceil(extra * (E.extra === 'skeleton' ? 1.5 : 0.75)); i++) list.push(E.extra);
+      let grave = 0;
+      for (const kind of list) {
+        let x = c.x, z = c.z;
+        if (kind === 'skeleton') { // in the graves (same spots isle.js puts the mounds)
+          const i = grave++ % 8, a = (i / 8) * 6.28 + 0.3, d = c.r * (0.45 + (i % 2) * 0.22) + (grave > 8 ? 1.2 : 0);
+          x = c.x + Math.cos(a) * d; z = c.z + Math.sin(a) * d;
+        } else for (let k = 0; k < 40; k++) {
+          const a = rand(0, 6.28), d = kind === 'musket' ? c.r * rand(0.7, 0.92) : c.r * rand(0.2, 0.65);
+          x = c.x + Math.sin(a) * d; z = c.z + Math.cos(a) * d;
+          if (walkable(x, z, 0.5)) break;
+        }
         const look = 1 + Math.floor(Math.random() * (ENEMY_LOOKS.length - 1)), seed = Math.floor(Math.random() * 1e9);
-        this.foes.push(this.makeFoe({ id: G.ids.next('foe'), look, seed, big, pos: [x, ground(x, z), z], group: grp.g, hp: big ? 5 : 2 }));
+        const y = kind === 'skeleton' ? ground(x, z) - 1.9 : ground(x, z);
+        this.foes.push(this.makeFoe({ id: G.ids.next('foe'), kind, look, seed, pos: [x, y, z], group: gi, state: kind === 'skeleton' ? 'buried' : 'idle' }));
       }
-    }
+    });
   }
 
   makeFoe(o) {
-    const p = makePerson({ ...ENEMY_LOOKS[o.look % ENEMY_LOOKS.length], seed: o.seed });
-    if (o.big) p.g.scale.setScalar(1.15);
-    p.g.position.set(...o.pos); p.g.rotation.y = rand(0, 6.28);
+    const kind = o.kind || 'cutlass', F = FOE[kind] || FOE.cutlass;
+    const p = kind === 'skeleton' ? makeSkeleton(o.seed) : makePerson({ ...ENEMY_LOOKS[o.look % ENEMY_LOOKS.length], seed: o.seed });
+    if (kind === 'brute') p.g.scale.setScalar(1.15);
+    if (kind === 'musket') giveMusket(p);
+    p.g.position.set(...o.pos); p.g.rotation.y = o.rot ?? rand(0, 6.28);
     this.shore.root.add(p.g);
-    return { id: o.id, p, look: o.look, seed: o.seed, big: !!o.big, hp: o.hp ?? 2, maxHp: o.hp ?? 2, group: o.group ?? 0, state: o.state || 'idle',
-      home: { x: o.pos[0], z: o.pos[2] }, atkCD: rand(0.8, 1.4), hitCD: 0, swingHit: true, deadT: 0 };
+    return { id: o.id, kind, p, look: o.look, seed: o.seed, big: kind === 'brute', hp: o.hp ?? F.hp, maxHp: F.hp, group: o.group ?? 0, state: o.state || 'idle',
+      home: { x: o.pos[0], z: o.pos[2] }, atkCD: rand(0.8, 1.4), hitCD: 0, swingHit: true, deadT: 0, riseT: 0 };
   }
 
   update(dt, t) {
     if (!this.active) return;
     const G = this.G, S = G.ship;
     if (this.phase === 'sail') {
-      if (Math.hypot(S.pos.x - ISLET.x, S.pos.z - ISLET.z) < ISLET.r + 62) this.dropAnchor();
+      if (Math.hypot(S.pos.x - ANCHORAGE.x, S.pos.z - ANCHORAGE.z) < 45) this.dropAnchor();
       return;
     }
     const ashore = this.playersAshore(), riders = this.boat.riders();
@@ -189,7 +216,9 @@ export class Island {
     this.noticeLandings();
     this.placeCrew(ashore.length ? 'shore' : riders.length ? 'boat' : 'ship');
     if (this.phase === 'return' && !ashore.length && !riders.length) { this.finish(); return; }
+    this.wakeEncounters();
     this.updateFoes(dt, t);
+    this.updateBoulder(dt);
     // The dig: someone at the X and no guard left near it
     const C = this.chest, s = this.site;
     if (C.state === 'buried') {
@@ -275,12 +304,15 @@ export class Island {
     }
   }
   crewAshore(list = this.shoreCrew()) {
-    const s = this.site;
+    const s = this.site, B = this.boat;
     list.forEach((m) => {
-      const i = SHORE_CREW.indexOf(m.name);
+      const i = SHORE_CREW.indexOf(m.name), sd = i ? 1.3 : -1.3;
       m.ashore = true; m.inBoat = false; m.away = null;
-      const x = s.lx - Math.sin(s.yaw) * 0.5 + (i ? 1.6 : -1.6) * Math.cos(s.yaw), z = s.lz - Math.cos(s.yaw) * 0.5 - (i ? 1.6 : -1.6) * Math.sin(s.yaw);
-      this.shore.root.add(m.p.g); m.p.g.position.set(x, ground(x, z), z); m.p.g.rotation.set(0, s.yaw, 0);
+      // Hop out over the bow of the beached boat (or onto the beach where the trail starts)
+      const [fx, fz] = B.fwd(B.rh ?? 0);
+      let x = (B.rx ?? s.lx) + fx * 4.2 - fz * sd, z = (B.rz ?? s.lz) + fz * 4.2 + fx * sd;
+      if (!walkable(x, z)) { x = s.lx + Math.cos(s.lyaw) * sd; z = s.lz - Math.sin(s.lyaw) * sd; }
+      this.shore.root.add(m.p.g); m.p.g.position.set(x, ground(x, z), z); m.p.g.rotation.set(0, s.lyaw ?? 0, 0);
       m.p.sword.visible = true;
     });
   }
@@ -343,15 +375,15 @@ export class Island {
     return true;
   }
 
-  // ---------- Guards ----------
+  // ---------- Foes ----------
   updateFoes(dt, t) {
     const G = this.G;
     const targets = [];
     for (const pl of this.playersAshore()) if (!pl.dead) targets.push({ pl, pos: pl.headLocal });
     for (const m of this.shoreCrew()) if (m.ashore) targets.push({ crew: m, pos: m.p.g.position });
     for (let i = this.foes.length - 1; i >= 0; i--) {
-      const f = this.foes[i], p = f.p, pos = p.g.position;
-      f.hitCD -= dt;
+      const f = this.foes[i], p = f.p, pos = p.g.position, F = FOE[f.kind] || FOE.cutlass;
+      f.hitCD -= dt; p.pose = null;
       if (f.state === 'dead') {
         f.deadT += dt; animatePerson(p, dt, false, t);
         if (f.deadT > 3) pos.y -= dt * 0.6;
@@ -360,12 +392,31 @@ export class Island {
       }
       let tg = null, td = 1e9;
       for (const x of targets) { const d = flat(x.pos, pos.x, pos.z) - (x.pl ? 1 : 0); if (d < td) { td = d; tg = x; } }
+      // Skeletons lie in their graves until someone walks among them, then claw their way up
+      if (f.state === 'buried') {
+        if (tg && td < 12) {
+          for (const o of this.foes) if (o.group === f.group && o.state === 'buried') { o.state = 'rise'; o.riseT = -rand(0, 1.2); }
+          G.events.emit('skeletonsRise', { pos: new THREE.Vector3(pos.x, ground(pos.x, pos.z) + 0.5, pos.z) });
+        }
+        continue;
+      }
+      if (f.state === 'rise') {
+        f.riseT += dt;
+        const gy = ground(pos.x, pos.z), k = Math.max(0, Math.min(1, f.riseT / 1.6));
+        pos.y = gy - 1.9 * (1 - k * (2 - k));
+        if (tg) facePerson(p, tg.pos.x - pos.x, tg.pos.z - pos.z, dt, 3);
+        p.pose = 'haul'; animatePerson(p, dt, false, t);
+        if (k > 0.3 && Math.random() < dt * 8) G.fx.debris(_a.set(pos.x, gy + 0.1, pos.z), 2);
+        if (k >= 1) { f.state = 'fight'; pos.y = gy; }
+        continue;
+      }
+      const shooter = f.kind === 'musket', wake = shooter ? 26 : 14;
       if (f.state === 'idle') {
-        if (tg && td < 14) {
+        if (tg && td < wake) {
           const first = !this.alerted?.has(f.group);
           (this.alerted = this.alerted || new Set()).add(f.group);
-          for (const o of this.foes) if (o.group === f.group && o.state === 'idle') o.state = 'fight';
-          G.events.emit('guardsAlerted', { pos: new THREE.Vector3(pos.x, pos.y + 1.6, pos.z), first, big: f.group === 1 });
+          for (const o of this.foes) if (o.group === f.group && o.state === 'idle') { o.state = 'fight'; if (o.kind === 'musket') o.atkCD = rand(1.6, 2.8); }
+          G.events.emit('guardsAlerted', { pos: new THREE.Vector3(pos.x, pos.y + 1.6, pos.z), first, big: f.group === 3, group: f.group });
         } else {
           // On watch: back to his post, looking about
           if (!this.walk(p, f.home.x, f.home.z, dt, 1.4)) { animatePerson(p, dt, true, t); continue; }
@@ -374,28 +425,72 @@ export class Island {
           continue;
         }
       }
-      if (!tg || td > 30) { f.state = 'idle'; animatePerson(p, dt, false, t); continue; }
+      if (!tg || td > 34) { f.state = 'idle'; animatePerson(p, dt, false, t); continue; }
       const dx = tg.pos.x - pos.x, dz = tg.pos.z - pos.z, d = Math.hypot(dx, dz);
       facePerson(p, dx, dz, dt);
       let moving = false;
-      if (d > 1.05 && p.attack < 0) { this.walk(p, tg.pos.x, tg.pos.z, dt, f.big ? 1.7 : 2.0); moving = true; }
+      f.atkCD -= dt;
+      if (shooter && d > 2.4) {
+        // Sharpshooter: holds his spot and takes aim
+        const hd = Math.hypot(f.home.x - pos.x, f.home.z - pos.z);
+        if (hd > 1.2 && p.attack < 0) { this.walk(p, f.home.x, f.home.z, dt, F.speed); moving = true; }
+        else p.pose = 'aim';
+        if (!moving && f.atkCD <= 0 && d < 34) { f.atkCD = rand(3.2, 4.6); this.fireMusket(f, tg, d); }
+      } else if (d > 1.05 && p.attack < 0) {
+        // Swordsmen (and a sharpshooter you've walked right up to) close in
+        if (!shooter || Math.hypot(f.home.x - pos.x, f.home.z - pos.z) < 6) { this.walk(p, tg.pos.x, tg.pos.z, dt, F.speed); moving = true; }
+      }
       for (const o of this.foes) {
-        if (o === f || o.state === 'dead') continue;
+        if (o === f || o.state === 'dead' || o.state === 'buried') continue;
         const op = o.p.g.position, ox = pos.x - op.x, oz = pos.z - op.z, od = Math.hypot(ox, oz);
         if (od < 0.8 && od > 1e-3) { const nx = pos.x + (ox / od) * (0.8 - od) * 0.5, nz = pos.z + (oz / od) * (0.8 - od) * 0.5; if (walkable(nx, nz)) { pos.x = nx; pos.z = nz; } }
       }
       pos.y = ground(pos.x, pos.z);
-      f.atkCD -= dt;
       if (d < 1.45 && f.atkCD <= 0 && p.attack < 0) { p.attack = 0; f.swingHit = false; f.atkCD = rand(1.5, 2.2); }
       if (p.attack > 0.62 && !f.swingHit) {
         f.swingHit = true;
         _a.set(pos.x, pos.y + 1.3, pos.z); G.events.emit('boarderSwing', { pos: _a });
-        if (d < 1.7 && tg.pl) G.hurtPlayer(tg.pl, f.big ? 14 : 10);
+        if (d < 1.7 && tg.pl) G.hurtPlayer(tg.pl, F.dmg);
         else if (d < 1.7 && Math.random() < 0.6) G.events.emit('parried', { pos: _a });
       }
       animatePerson(p, dt, moving, t);
     }
   }
+
+  // A sharpshooter fires at a player or one of the crew (a near miss more often than not)
+  fireMusket(f, tg, d) {
+    const G = this.G, pos = f.p.g.position, yaw = f.p.g.rotation.y;
+    const from = new THREE.Vector3(pos.x - Math.sin(yaw) * 0.95, pos.y + 1.38, pos.z - Math.cos(yaw) * 0.95);
+    const hit = Math.random() < Math.max(0.15, Math.min(0.5, 0.58 - d * 0.013));
+    const to = new THREE.Vector3(tg.pos.x, tg.pl ? tg.pos.y - 0.25 : tg.pos.y + 1.3, tg.pos.z);
+    if (!hit) to.add(_b.set(rand(-1, 1), rand(-0.6, 0.9), rand(-1, 1)));
+    const dir = to.clone().sub(from).normalize();
+    G.events.emit('musketShot', { from, dir, to, hit: hit ? 'player' : null });
+    if (hit && tg.pl) G.hurtPlayer(tg.pl, FOE.musket.dmg);
+  }
+
+  // ---------- The boulder trap on the steep climb to the temple ----------
+  trapPoints() { const L = islePath().len; return { top: L - 22, trig: L - 56, end: L - 92 }; }
+  updateBoulder(dt) {
+    const G = this.G, B = this.boulder, T = this.trapPoints();
+    if (B.state === 'set') {
+      // Someone climbing past the trigger point: the rock up top starts to move
+      const there = this.playersAshore().some((pl) => !pl.dead && flat(pl.headLocal, ...this.xz(T.trig)) < 4);
+      if (there) { B.state = 'loosed'; B.t = 0; B.s = T.top; B.v = 0; G.events.emit('boulderLoosed', { pos: this.boulderPos(T.top) }); }
+      return;
+    }
+    if (B.state === 'loosed') { B.t += dt; if (B.t > 1.4) B.state = 'rolling'; return; }
+    if (B.state !== 'rolling') return;
+    B.v = Math.min(9, B.v + dt * 4.5); B.s -= B.v * dt;
+    const c = this.boulderPos(B.s);
+    for (const pl of this.playersAshore()) {
+      if (pl.dead || B.hit.has(pl.id)) continue;
+      if (flat(pl.headLocal, c.x, c.z) < BOULDER_R + 0.35) { B.hit.add(pl.id); G.hurtPlayer(pl, 30); G.events.emit('boulderHit', { player: pl, pos: c }); }
+    }
+    if (B.s <= T.end) { B.state = 'done'; G.events.emit('boulderSmashed', { pos: c }); }
+  }
+  xz(s) { const p = islePathAt(s); return [p.x, p.z]; }
+  boulderPos(s) { const p = islePathAt(s); return new THREE.Vector3(p.x, ground(p.x, p.z) + BOULDER_R * 0.9, p.z); }
 
   hitFoe(f, dmg, kx, kz) {
     if (f.state === 'dead' || f.hitCD > 0) return;
@@ -449,9 +544,10 @@ export class Island {
     const s = this.site;
     return {
       phase: this.phase, anchored: this.anchored, up: { ...this.up },
-      site: s ? [s.xx, s.xz, s.lx ?? null, s.lz ?? null, s.bx ?? null, s.bz ?? null, s.yaw ?? null] : null,
+      site: s ? [s.xx, s.xz, s.yaw, s.lx ?? null, s.lz ?? null, s.lyaw ?? null] : null,
+      boulder: [['set', 'loosed', 'rolling', 'done'].indexOf(this.boulder.state), r2(this.boulder.s)],
       chest: this.chest.state,
-      foes: this.foes.map((f) => ({ id: f.id, state: f.state, hp: f.hp, look: f.look, seed: f.seed, big: f.big, group: f.group,
+      foes: this.foes.map((f) => ({ id: f.id, kind: f.kind, state: f.state, hp: f.hp, look: f.look, seed: f.seed, group: f.group, pose: f.p.pose,
         pos: [r2(f.p.g.position.x), r2(f.p.g.position.y), r2(f.p.g.position.z)], rot: r2(f.p.g.rotation.y), attack: r2(f.p.attack), dead: f.p.dead })),
       crew: this.shoreCrew().filter((m) => m.ashore).map((m) => m.id),
       boatCrew: this.shoreCrew().filter((m) => m.inBoat).map((m) => m.id),
@@ -465,7 +561,8 @@ export class Island {
     this.phase = sn.phase; this.anchored = sn.anchored; this.chest.state = sn.chest;
     Object.assign(this.up, sn.up);
     const a = sn.site;
-    this.site = a ? { xx: a[0], xz: a[1], ...(a[2] !== null ? { lx: a[2], lz: a[3], bx: a[4], bz: a[5], yaw: a[6] } : {}) } : null;
+    this.site = a ? { xx: a[0], xz: a[1], yaw: a[2], ...(a[3] !== null ? { lx: a[3], lz: a[4], lyaw: a[5] } : {}) } : null;
+    if (sn.boulder) { this.boulder.state = ['set', 'loosed', 'rolling', 'done'][sn.boulder[0]]; this.boulder.s = sn.boulder[1]; }
     for (const m of this.shoreCrew()) { m.ashore = sn.crew.includes(m.id); m.inBoat = !!sn.boatCrew?.includes(m.id); }
     this.boat.applySnap(sn.boat);
     const seen = new Set();
@@ -534,14 +631,18 @@ export class Island {
     for (const o of v.objs || []) o.removeFromParent();
     this.v = { key, objs: [] };
     if (!s) return;
+    this.isle.build(); // the island's jungle, ruins and props (only the first time)
     const add = (o) => { R.add(o); this.v.objs.push(o); return o; };
     const gx = ground(s.xx, s.xz);
+    // The boulder waiting at the top of the steep climb
+    const bm = add(new THREE.Mesh(rockGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })));
+    bm.scale.set(BOULDER_R, BOULDER_R * 1.25, BOULDER_R); bm.rotation.order = 'YXZ'; this.v.boulder = bm;
     // The beam: a tall column of gold light over the X, seen from far out at sea
     const beam = add(new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 220, 16, 1, true), BEAM_MAT));
     beam.position.set(s.xx, gx + 110, s.xz); beam.renderOrder = 2; this.v.beam = beam;
     const xm = add(buildX()); xm.position.set(s.xx, gx + 0.05, s.xz); this.v.x = xm;
     const chest = buildChest(); add(chest.g); chest.g.position.set(s.xx, gx - 1.2, s.xz); chest.g.visible = false; this.v.chest = chest;
-    if (s.lx !== undefined) {
+    {
       chest.g.rotation.y = s.yaw;
       this.v.cards = KINDS.map((k, i) => {
         const tex = canvasTex(320, 420, (g, w, h) => {
@@ -587,7 +688,17 @@ export class Island {
     this.applyLooks();
     this.syncVisuals();
     const v = this.v, s = this.site;
+    this.isle.view(dt);
     this.boat.view(dt);
+    if (v.boulder) {
+      // Sits up top until it's loosed, then rolls down the trail
+      const B = this.boulder, T = this.trapPoints(), sNow = B.state === 'set' || B.state === 'loosed' ? T.top : B.s;
+      const c = this.boulderPos(sNow), a = islePathAt(sNow + 1), b = islePathAt(sNow - 1);
+      if (B.state === 'loosed') c.x += Math.sin(t * 40) * 0.04;
+      v.boulder.position.copy(c); v.boulder.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
+      v.boulder.rotation.x = -(T.top - sNow) / BOULDER_R;
+      v.boulder.visible = B.state !== 'done';
+    }
     // Desktop: say how to get down the ladder the first time you walk up to it
     if (G.mode === 'desktop' && !this.toldLadder && this.boat.nearLadderTop(P) && this.boat.canClimbDown()) { this.toldLadder = true; G.hud.msg('Look at the rope ladder and click to climb down', 3.5); }
     if (v.beam) {
@@ -619,19 +730,7 @@ export class Island {
 
   // ---------- The treasure map ----------
   buildMap() {
-    const I = ISLET, size = 128, half = 70;
-    // The island drawn once as a parchment chart
-    const base = document.createElement('canvas'); base.width = base.height = size;
-    const g = base.getContext('2d'), img = g.createImageData(size, size);
-    for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) {
-      const x = I.x - half + (i + 0.5) * (2 * half / size), z = I.z - half + (j + 0.5) * (2 * half / size), h = landHeight(x, z), o = (j * size + i) * 4;
-      let c;
-      if (h < -0.3) c = [150, 170, 160]; else if (h < 1.6) c = [226, 206, 156]; else { const k = Math.min(1, h / 24); c = [196 - 70 * k, 186 - 50 * k, 120 - 40 * k]; }
-      if (h > -0.6 && h < 0.0) c = [110, 90, 60];
-      img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255;
-    }
-    g.putImageData(img, 0, 0);
-    this.mapBase = { canvas: base, x0: I.x - half, z0: I.z - half, size: 2 * half };
+    this.mapBase = null; // the island chart, drawn the first time it's needed (isle.js)
     this.mapTex = canvasTex(256, 256, () => {});
     this.mapSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.mapTex, transparent: true, depthTest: false, depthWrite: false }));
     this.mapSprite.scale.set(0.2, 0.2, 1); this.mapSprite.renderOrder = 996; this.mapSprite.visible = false;
@@ -648,10 +747,10 @@ export class Island {
     this.mapSprite.visible = !!(ashore && vr && left?.src);
     if (!ashore || (this.mapT -= dt) > 0) return;
     this.mapT = 0.2;
-    const g = this.mapTex.userData.ctx, W = 256, s = this.site, B = this.mapBase;
+    const g = this.mapTex.userData.ctx, W = 256, s = this.site, B = this.mapBase || (this.mapBase = drawIsleMap(256));
     G.camera.getWorldPosition(_a); G.camera.getWorldDirection(_b);
     let fx = _b.x, fz = _b.z; const fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl;
-    const rx = -fz, rz = fx, sc = 2.2, cx = W / 2, cy = W / 2 + 20;
+    const rx = -fz, rz = fx, sc = 1.7, cx = W / 2, cy = W / 2 + 20;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.fillStyle = '#d9c393'; g.beginPath(); g.roundRect(0, 0, W, W, 24); g.fill();
     g.save(); g.beginPath(); g.roundRect(8, 8, W - 16, W - 16, 18); g.clip();
@@ -690,6 +789,7 @@ export class Island {
       return `Treasure! Sail to the gold light (${Math.round(d)} m)`;
     }
     if (this.phase === 'return') return 'Prize taken! Row back to the ship';
+    if (this.chest.state === 'buried' && G.player.ship && G.player.ship.isShore) return 'Follow the trail uphill to the X';
     return { buried: 'At anchor: down the ladder, row ashore, find the X', digging: 'Digging up the treasure...', up: 'Open the chest!', open: 'Pick your prize!' }[this.chest.state] || null;
   }
 }
