@@ -60,14 +60,25 @@ export function heroBody(k, c, R) {
     const p = hips.attributes.position;
     for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (y < 0.8) p.setY(i, y + (0.8 - y) * Math.min(1, Math.abs(p.getX(i)) / 0.2) * 0.75); }
   }
-  k.add(hips, c.pants, 0, 0, [1, 1, 0.82]);
-  // A full, rounded rear
-  for (const s of [-1, 1]) k.ball(0.112, 1, c.pants, [s * 0.082, 0.785, 0.05], [0.25, s * -0.2, 0], [1, 1.0, 0.85]);
+  if (!c.thong) {
+    k.add(hips, c.pants, 0, 0, [1, 1, 0.82]);
+    // A full, rounded rear
+    for (const s of [-1, 1]) k.ball(0.112, 1, c.pants, [s * 0.082, 0.785, 0.05], [0.25, s * -0.2, 0], [1, 1.0, 0.85]);
+  } else {
+    // Thong: bare hips and a bigger rear, a small front panel, strings round the hips and down the back
+    k.add(hips, skin, 0, 0, [1, 1, 0.82]);
+    for (const s of [-1, 1]) k.ball(0.128, 1, skin, [s * 0.084, 0.78, 0.062], [0.25, s * -0.2, 0], [1, 1.0, 0.88]);
+    const panel = lathe([[0.128, 0.728], [0.2, 0.765], [0.222, 0.81], [0.213, 0.85]], SEG, Math.PI - 0.55, 1.1), pp = panel.attributes.position;
+    for (let i = 0; i < pp.count; i++) { const y = pp.getY(i); if (y < 0.82) pp.setY(i, y + (0.82 - y) * Math.min(1, Math.abs(pp.getX(i)) / 0.12) * 0.65); }
+    k.add(panel, c.pants, 0, 0, [1, 1, 0.83]);
+    k.add(lathe([[0.214, 0.835], [0.21, 0.848]]), c.pants, 0, 0, [1.01, 1, 0.84]);                  // string round the hips
+    k.tube([[0, 0.84, 0.17], [0, 0.8, 0.165], [0, 0.76, 0.15], [0, 0.73, 0.11]], 0.009, c.pants, 4);  // and down the back
+  }
   k.add(lathe(TORSO), skin, 0, 0, [1, 1, D]);
   // Rounded shoulders: blend the torso into the arms
   // Bust: full rounded skin shapes set close together (cleavage), with the top's cups
   // covering only the lower part and a trim along the cut edge.
-  const BY = 1.3, BX = 0.078, BR = 0.128, bz = front(BY) + 0.058, BS = [1, 0.92, 0.9];
+  const bk = c.bustScale ?? 1, BY = 1.3 + (1 - bk) * 0.03, BX = 0.078 * (0.6 + 0.4 * bk), BR = 0.128 * bk, bz = front(BY) + 0.058 * bk, BS = [1, 0.92, 0.9];
   const bust = (col, cut, trim) => {
     for (const s of [-1, 1]) {
       const at = [s * BX, BY, bz], rot = [0.12, s * 0.28, 0];
