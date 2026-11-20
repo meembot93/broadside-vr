@@ -1,0 +1,22 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Pirate turnaround</title>
+<style>html,body{margin:0;height:100%;overflow:hidden}</style>
+<script type="importmap">{ "imports": { "three": "../lib/three.module.js", "three/addons/": "../lib/addons/" } }</script>
+</head><body>
+<script type="module">
+import * as THREE from 'three';
+// Dev page: one pirate from four angles (front, 3/4, side, back) like a model sheet.
+// ?type=raider|rogue|...  ?seed=N
+import { makePerson } from '../js/people.js';
+const q = new URLSearchParams(location.search);
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(devicePixelRatio); renderer.setSize(innerWidth, innerHeight); document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x8a8a8a);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x6a6a6a, 1.6));
+const sun = new THREE.DirectionalLight(0xfff4e8, 2.0); sun.position.set(-2, 5, -6); scene.add(sun);
+const angles = [0, -0.7, -Math.PI / 2, Math.PI];
+angles.forEach((a, i) => { const p = makePerson({ type: q.get('type') || 'raider', seed: +(q.get('seed') || 7) }); p.g.rotation.y = Math.PI + a; p.g.position.x = (i - 1.5) * 1.0; scene.add(p.g); });
+const cam = new THREE.PerspectiveCamera(9.5, innerWidth / innerHeight, 0.1, 100);
+cam.position.set(0, 1.0, 17); cam.lookAt(0, 0.9, 0);
+renderer.render(scene, cam); window.done = true; window.stats = {};
+</script></body></html>
