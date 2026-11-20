@@ -4,14 +4,14 @@ import { vary } from './kit.js';
 // A curvier, more detailed figure for the two pirate women from Meem's newer turnarounds
 // ('rogue' and 'raider' in people.js). Same faceted, flat-shaded style and the same
 // six-part rig (body, head, two arms, two legs) as every other pirate, just sculpted
-// closer to the reference: a waist, hips and bust, smooth shoulders, plaited braids,
+// closer to the reference: a shaped torso, smooth shoulders, plaited braids,
 // thigh-high heeled boots and a fuller face.
 
 const GOLD = 0xd0a03a, FRILL = 0xf4eee2;
 const SEG = 12, D = 0.74;          // torso: lathe segments (a vertex points straight forward) and front-back depth
 export const HERO_ARM_X = 0.222, HERO_LEG_X = 0.1, HERO_HEAD_SCALE = 1.06;
 
-// Torso profile [radius, height]: hips, narrow waist, ribcage, bust line, shoulders, neck
+// Torso profile [radius, height]: hips, narrow waist, ribcage, chest, shoulders, neck
 const TORSO = [[0, 0.84], [0.195, 0.84], [0.172, 0.93], [0.15, 1.03], [0.158, 1.13], [0.18, 1.23], [0.193, 1.31], [0.19, 1.38], [0.168, 1.44], [0.12, 1.5], [0.06, 1.545]];
 const rAt = (P, y) => {
   for (let i = 1; i < P.length; i++) if (y <= P[i][1]) { const [r0, y0] = P[i - 1], [r1, y1] = P[i]; return r0 + (r1 - r0) * (y - y0) / Math.max(1e-6, y1 - y0); }
@@ -62,10 +62,10 @@ export function heroBody(k, c, R) {
   }
   if (!c.thong) {
     k.add(hips, c.pants, 0, 0, [1, 1, 0.82]);
-    // A full, rounded rear
+    // Hip shape
     for (const s of [-1, 1]) k.ball(0.112, 1, c.pants, [s * 0.082, 0.785, 0.05], [0.25, s * -0.2, 0], [1, 1.0, 0.85]);
   } else {
-    // Thong: bare hips and a bigger rear, a small front panel, strings round the hips and down the back
+    // Alternative bottoms style (see the type's reference sheet)
     k.add(hips, skin, 0, 0, [1, 1, 0.82]);
     for (const s of [-1, 1]) k.ball(0.128, 1, skin, [s * 0.084, 0.78, 0.062], [0.25, s * -0.2, 0], [1, 1.0, 0.88]);
     const panel = lathe([[0.128, 0.728], [0.2, 0.765], [0.222, 0.81], [0.213, 0.85]], SEG, Math.PI - 0.55, 1.1), pp = panel.attributes.position;
@@ -76,16 +76,15 @@ export function heroBody(k, c, R) {
   }
   k.add(lathe(TORSO), skin, 0, 0, [1, 1, D]);
   // Rounded shoulders: blend the torso into the arms
-  // Bust: full rounded skin shapes set close together (cleavage), with the top's cups
-  // covering only the lower part and a trim along the cut edge.
+  // Chest shapes, with the top's garment
   const bk = c.bustScale ?? 1, BY = 1.3 + (1 - bk) * 0.03, BX = 0.078 * (0.6 + 0.4 * bk), BR = 0.128 * bk, bz = front(BY) + 0.058 * bk, BS = [1, 0.92, 0.9];
   const bust = (col, cut, trim) => {
     for (const s of [-1, 1]) {
       const at = [s * BX, BY, bz], rot = [0.12, s * 0.28, 0];
-      if (col === null) {  // bare: a teardrop, sloping gently from the chest to a fuller, rounder bottom
+      if (col === null) {  // shaped to the reference
         const g = new THREE.IcosahedronGeometry(BR, 2), p = g.attributes.position;
         const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-        for (let i = 0; i < p.count; i++) {   // one smooth curve: no crease at the middle
+        for (let i = 0; i < p.count; i++) {
           const y = p.getY(i) / BR, z = p.getZ(i);
           let nz = z;
           if (z < 0) nz = z * (1 - 0.5 * sm(-0.6, 1.0, y)) * (1 + 0.05 * sm(0.2, -1, y));
@@ -111,7 +110,7 @@ export function heroBody(k, c, R) {
     k.add(new THREE.TorusGeometry(0.02, 0.007, 4, 8), GOLD, [0, BY - 0.02, bz - BR * 0.72]);   // gold ring between the cups
     // Frilled bottoms: white trim along the top edge
     k.add(lathe([[0.206, 0.848], [0.2, 0.866]]), FRILL, 0, 0, [1.01, 1, 0.83]);
-  } else if (c.top === 'pasties') {  // bare, with small black X pasties like the reference
+  } else if (c.top === 'pasties') {  // outfit from the reference sheet
     bust(null, 0, null);
     const e = new THREE.Euler(), n = new THREE.Vector3();
     for (const s of [-1, 1]) {
@@ -121,8 +120,8 @@ export function heroBody(k, c, R) {
     }
   } else if (c.top === 'blouse') {
     bust(c.shirt, 0.43, vary(c.shirt, 0.06, R));
-    band(k, 1.0, 1.27, 0.012, c.corset);                     // laced corset under the bust
-    band(k, 1.25, 1.36, 0.024, c.shirt);                     // off-shoulder blouse: neckline at the bust
+    band(k, 1.0, 1.27, 0.012, c.corset);                     // laced corset
+    band(k, 1.25, 1.36, 0.024, c.shirt);                     // off-shoulder blouse
     band(k, 1.35, 1.38, 0.034, vary(c.shirt, 0.05, R));     // gathered top edge
     // Laces: criss-cross cream cord with dark eyelets down the front
     for (let i = 0; i < 4; i++) {
