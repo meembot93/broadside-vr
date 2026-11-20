@@ -102,8 +102,11 @@ export class RemotePlayer {
     g.visible = true;
     // On a deck the floor is y = 0; ashore (island.js, the shore's space is the world) it's the ground
     const bx = V.head.x + Math.sin(V.yaw) * 0.09, bz = V.head.z + Math.cos(V.yaw) * 0.09;
-    const floor = this.ship.isShore ? Math.max(0, landHeight(bx, bz)) : Math.min(0, V.head.y - 1.62); // below 0: on the ladder
-    const sc = clamp((V.head.y - floor) / 1.66, 0.62, 1.15);
+    // In the longboat they sit on the thwart, so the body sits down under the head instead of shrinking
+    const sitting = !!this.ship.isBoat;
+    p.pose = sitting ? 'sit' : null;
+    const floor = this.ship.isShore ? Math.max(0, landHeight(bx, bz)) : sitting ? V.head.y - 1.3 : Math.min(0, V.head.y - 1.62); // below 0: on the ladder
+    const sc = sitting ? 1 : clamp((V.head.y - floor) / 1.66, 0.62, 1.15);
     g.scale.setScalar(sc);
     g.position.set(bx, floor, bz);
     g.rotation.y = V.yaw;

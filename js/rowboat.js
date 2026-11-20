@@ -323,6 +323,8 @@ export class Rowboat {
   topSpot() { return { x: this.side * (halfWidth(LADDER_Z) - 0.75), z: LADDER_Z }; }
   boatFloorY() { this.frame.root.getWorldPosition(_b); return this.G.ship.root.worldToLocal(_b).y; }
   canClimbDown() { return this.active && this.state === 'moored'; }
+  // Sit riders down on the thwart: the head about 1.05 m over the boat floor, however tall you stand
+  seatDrop() { return clamp(1.05 - this.G.camera.position.y, -0.75, 0); }
 
   // VR hands: the ladder (on deck or from the boat) and the oars (in the boat)
   targets(P, hand, consider) {
@@ -333,10 +335,17 @@ export class Rowboat {
       const y = clamp(_b.y, LOW + 0.1, railHeight(LADDER_Z) + 0.1);
       const lx = y > 0 ? this.side * (halfWidth(LADDER_Z) + 0.1) : this.side * (hullX(LADDER_Z, y) + 0.08);
       const d = Math.hypot(_b.x - lx, Math.max(0, Math.abs(_b.z - LADDER_Z) - 0.22), _b.y - y);
-      if (P.ship === S && P.climb ? true : (P.ship === this.frame ? y < -0.2 : y > 0.3)) {
+      // From the boat the ladder only answers a hand reached up above your head, once you've sat
+      // down for a moment, so gripping the oars never pulls you back up onto it.
+      let ok = P.ship === S && P.climb ? true : y > 0.3;
+      if (P.ship === this.frame) {
+        G.camera.getWorldPosition(_c); S.root.worldToLocal(_c);
+        ok = y < 0.25 && performance.now() - (P.boatAt || 0) > 1500 && _b.y > _c.y + 0.05;
+      }
+      if (ok) {
         _c.set(lx, y, clamp(_b.z, LADDER_Z - 0.22, LADDER_Z + 0.22)); S.root.localToWorld(_c);
-        const text = P.climb ? '' : P.ship === S ? (this.state === 'moored' ? 'GRIP and pull\nto climb down' : 'Wait for\nthe boat') : 'GRIP and pull\nto climb up';
-        consider('ladder', d, 0.32, { point: _c.clone(), text });
+        const text = P.climb ? '' : P.ship === S ? (this.state === 'moored' ? 'GRIP and pull\nto climb down' : 'Wait for\nthe boat') : 'GRIP the rung\nto climb back up';
+        consider('ladder', d, P.ship === this.frame ? 0.22 : 0.32, { point: _c.clone(), text });
       }
     }
     if (P.ship === this.frame) {
@@ -448,6 +457,7 @@ export class Rowboat {
       P.dolly.position.y = Math.max(LOW, this.boatFloorY()) + 0.3; // a step up onto the ladder
     }
     P.climb = true; P.climbFrom = from; P.climbHand = null;
+    if (from === 'top') P.armForShore();
     // Face the ship's side while climbing
     this.placeHead(P, S, this.colX(P.dolly.position.y + 1.6), LADDER_Z, this.side > 0 ? Math.PI / 2 : -Math.PI / 2, P.dolly.position.y);
     P.blink();
@@ -478,7 +488,7 @@ export class Rowboat {
     P.unbelt(); P.blink();
   }
   enterBoat(P) {
-    this.endClimb(P);
+    this.endClimb(P); P.boatAt = performance.now();
     this.placeHead(P, this.frame, 0, SEAT_Z[this.seatOf(P)] + 0.08, 0, 0);
     P.blink();
   }
@@ -520,7 +530,7 @@ export class Rowboat {
   // Keep a rider inside the boat; walk off the bow once she's on the beach
   clampRider(P) {
     const G = this.G;
-    P.dolly.position.y = 0;
+    P.dolly.position.y = this.seatDrop();
     P.dolly.updateMatrixWorld(true);
     G.camera.getWorldPosition(_a); this.frame.root.worldToLocal(_a);
     if (this.state === 'beached' && _a.z < -HALF + 0.75 && this.stepAshore(P)) { G.island.clampWalker(P); return; }
@@ -535,7 +545,7 @@ export class Rowboat {
     _a.set(wx, this.frame.root.position.y + 0.5, wz); this.frame.root.worldToLocal(_a);
     if (Math.abs(_a.z) > HALF - 0.1 || Math.abs(_a.x) > halfBeam(_a.z) + 0.1) return false;
     this.placeHead(P, this.frame, 0, SEAT_Z[this.seatOf(P)] + 0.08, 0, 0);
-    P.blink();
+    P.boatAt = performance.now(); P.blink();
     return true;
   }
 
