@@ -15,11 +15,15 @@ and a harder voyage begins; lose the ship and the voyage starts over. For testin
 
 After each voyage won there's a **treasure hunt** (`js/island.js`): a gold light marks treasure
 on the islet. Sail close (or walk away from the wheel and Hawkins sails there) and the ship drops
-anchor. Stand in the gold ring by the starboard rail to row ashore with Mags and Rosa; your map
-is on your left wrist (top right on desktop), and weapons you let go of hang on your belt. Fight
+anchor. A rope ladder goes over the side facing the island with the longboat tied below it
+(`js/rowboat.js`). Climb down (VR: GRIP the rungs and pull, or TRIGGER on the ladder; desktop:
+click it), then row for the beach with Mags and Rosa (VR: GRIP the oars and pull them toward you,
+or push the left stick; desktop: W, A, D) and walk off the bow. With nobody in her, a boatman
+brings the boat to whoever is waiting at the ladder or on the beach. Your map is on your left
+wrist (top right on desktop), and weapons you let go of hang on your belt. Fight
 past the guards to the X, the crew digs up a chest, open it and take one prize: bronze cannons
 (+35% damage), drilled gun crews (25% faster reload) or an iron-banded hull (+50 hull). Prizes
-stack and last the whole run. Row back aboard (ring by the boat) and the next voyage begins.
+stack and last the whole run. Row back, climb the ladder, and the next voyage begins.
 Works with friends: anyone can go ashore, whoever grabs a card first picks for the crew.
 `?treasure` starts straight on a treasure hunt.
 

@@ -115,7 +115,7 @@ G.byId = (id) => {
   return G.items.find((x) => x.id === id) || G.playerById(id) || G.enemies.boarders.find((b) => b.id === id) || G.damage.byId(id) || G.island.byId(id) || null;
 };
 // The deck (or beach) someone stands on, by id: our ship, an enemy ship, or 'shore' (island.js)
-G.frameById = (id) => (id === 'shore' ? G.island.shore : [G.ship, ...G.enemies.ships].find((s) => s.id === id) || null);
+G.frameById = (id) => (id === 'shore' ? G.island.shore : id === 'boat' ? G.island.boat.frame : [G.ship, ...G.enemies.ships].find((s) => s.id === id) || null);
 G.playerById = (id) => G.players.find((p) => p.id === id) || null;
 // Everything a player does goes through here (see actions.js).
 G.act = (a) => applyAction(G, { player: G.player.id, ...a });

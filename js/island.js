@@ -1,8 +1,9 @@
 // Treasure hunts: after every voyage won, a gold light marks treasure buried on the islet.
-// Sail there and the ship drops anchor; stand in the gold ring at the rail to row ashore with
-// two of the crew. Your map is on your left wrist (top right on desktop). Island guards stand
-// between the beach and the X. Beat them, the crew digs up a chest, open it and pick one of
-// three upgrades for the ship. Row back aboard and the next, harder voyage begins.
+// Sail there and the ship drops anchor; climb down the rope ladder into the longboat and row
+// for the beach (rowboat.js), with two of the crew. Your map is on your left wrist (top right
+// on desktop). Island guards stand between the beach and the X. Beat them, the crew digs up
+// a chest, open it and pick one of three upgrades for the ship. Row back, climb aboard and the
+// next, harder voyage begins.
 //
 // Rules (host only): update(), act() (called from actions.js), the guards and the shore crew.
 // Looks (every headset): view(), the map, the beam, rings, chest and cards.
@@ -11,8 +12,9 @@
 // The "shore" is a stand-in for a ship whose local space is the world: a player ashore has
 // player.ship === G.island.shore, so poses, actions and sword hits work like on any deck.
 //
-// Events: treasureMarked, anchorDropped, wentAshore, wentAboard, guardsAlerted, treasureGuarded,
-//   digStarted, chestUnearthed, chestOpened, upgradeChosen, treasureDone
+// Events: treasureMarked, anchorDropped, wentAshore, boardedBoat, wentAboard, boatCastOff,
+//   boatBeached, boatMoored, guardsAlerted, treasureGuarded, digStarted, chestUnearthed,
+//   chestOpened, upgradeChosen, treasureDone
 import * as THREE from 'three';
 import { landHeight, ISLET, ISLET_SOLIDS } from './land.js';
 import { makePerson, animatePerson, facePerson } from './people.js';
@@ -20,6 +22,7 @@ import { ENEMY_LOOKS } from './enemies.js';
 import { Kit } from './kit.js';
 import { hullX, STERN, BOW } from './ship.js';
 import { canvasTex, rand, segSegDist } from './util.js';
+import { Rowboat } from './rowboat.js';
 
 export const UPGRADES = {
   bronze: { name: 'Bronze cannons', text: 'Cannonballs hit\n35% harder', col: '#c8893a' },
@@ -27,8 +30,6 @@ export const UPGRADES = {
   hull: { name: 'Iron-banded hull', text: '+50 hull and\niron straps', col: '#4a5260' },
 };
 const KINDS = Object.keys(UPGRADES);
-// The gold ring on our deck where you row ashore from (ship-local x, z)
-export const DECK_RING = { x: 1.6, z: 2.6 };
 const SHORE_CREW = ['Mags', 'Rosa'];
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
@@ -39,7 +40,6 @@ const walkable = (x, z, pad = 0.3) => landHeight(x, z) > 0.15 && Math.hypot(x - 
   !ISLET_SOLIDS.some((o) => (x - o.x) ** 2 + (z - o.z) ** 2 < (o.r + pad) ** 2); // not inside a rock or a palm
 
 const BEAM_MAT = new THREE.MeshBasicMaterial({ color: 0xffd25a, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
-const RING_MAT = new THREE.MeshBasicMaterial({ color: 0xffd25a, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide });
 const BRONZE = new THREE.MeshLambertMaterial({ color: 0xa8692a, emissive: 0x2a1404 });
 
 function label(text, w = 512, h = 160, scale = 0.9) {
@@ -54,11 +54,6 @@ function label(text, w = 512, h = 160, scale = 0.9) {
   return sp;
 }
 
-function ring(r = 0.75) {
-  const m = new THREE.Mesh(new THREE.RingGeometry(r - 0.09, r, 40).rotateX(-Math.PI / 2), RING_MAT);
-  m.renderOrder = 3;
-  return m;
-}
 
 function buildChest() {
   const g = new THREE.Group(), k = new Kit();
@@ -80,15 +75,6 @@ function buildChest() {
   return { g, lid, gold };
 }
 
-function buildBoat() {
-  const k = new Kit();
-  k.box(1.3, 0.35, 3.6, 0x5d3b22, [0, 0, 0]);
-  k.box(1.0, 0.36, 3.2, 0x3a2414, [0, 0.03, 0]);
-  k.box(1.2, 0.06, 0.3, 0x6a4a2a, [0, 0.12, 0.5]); k.box(1.2, 0.06, 0.3, 0x6a4a2a, [0, 0.12, -0.7]);
-  k.box(0.6, 0.35, 0.6, 0x5d3b22, [0, 0, -1.9], [0, Math.PI / 4, 0]);
-  for (const s of [-1, 1]) k.box(0.06, 0.06, 2.6, 0xa08060, [s * 0.75, 0.15, -0.1], [0.2, s * 0.3, 0]);
-  return k.mesh();
-}
 
 function buildX() {
   const k = new Kit();
@@ -111,13 +97,17 @@ export class Island {
     this.anchored = false;
     this.level = 1;
     this.v = {};           // the visuals for the current site
-    this.ringT = 0; this.mapT = 0;
+    this.mapT = 0;
     this.looks = '';
+    this.walkable = walkable;
+    this.boat = new Rowboat(G, this);
+    this.frames = new Map(); // player id -> the frame they were in (to notice landings)
     this.buildMap();
   }
 
   get active() { return this.phase !== 'off'; }
   ashore(pl) { return pl.ship === this.shore; }
+  away(pl) { return pl.ship === this.shore || pl.ship === this.boat.frame; } // ashore or in the boat
   playersAshore() { return this.G.players.filter((pl) => this.ashore(pl)); }
   byId(id) { return this.foes.find((f) => f.id === id) || null; }
   get damageMul() { return 1 + 0.35 * this.up.bronze; }
@@ -152,6 +142,10 @@ export class Island {
     let lr = r; while (lr > 2 && landHeight(I.x + dx * lr, I.z + dz * lr) < 0.7) lr -= 0.5;
     Object.assign(this.site, { lx: r2(I.x + dx * lr), lz: r2(I.z + dz * lr), bx: r2(I.x + dx * (r + 1.2)), bz: r2(I.z + dz * (r + 1.2)), yaw: r2(Math.atan2(dx, dz)) });
     S.anchored = true; this.anchored = true; this.phase = 'hunt';
+    // The ladder goes over the side facing the island, with the boat tied up below it
+    S.root.updateMatrixWorld(true);
+    const side = S.root.worldToLocal(_a.set(I.x, 0, I.z)).x >= 0 ? 1 : -1;
+    this.boat.launch(side);
     this.spawnGuards();
     G.events.emit('anchorDropped', { pos: S.pos.clone() });
   }
@@ -187,13 +181,14 @@ export class Island {
     if (!this.active) return;
     const G = this.G, S = G.ship;
     if (this.phase === 'sail') {
-      if (Math.hypot(S.pos.x - ISLET.x, S.pos.z - ISLET.z) < ISLET.r + 75) this.dropAnchor();
+      if (Math.hypot(S.pos.x - ISLET.x, S.pos.z - ISLET.z) < ISLET.r + 62) this.dropAnchor();
       return;
     }
-    const ashore = this.playersAshore();
-    // Crew row back when nobody is left ashore
-    if (!ashore.length && this.shoreCrew().some((m) => m.ashore)) this.crewAboard();
-    if (this.phase === 'return' && !ashore.length) { this.finish(); return; }
+    const ashore = this.playersAshore(), riders = this.boat.riders();
+    this.boat.update(dt);
+    this.noticeLandings();
+    this.placeCrew(ashore.length ? 'shore' : riders.length ? 'boat' : 'ship');
+    if (this.phase === 'return' && !ashore.length && !riders.length) { this.finish(); return; }
     this.updateFoes(dt, t);
     // The dig: someone at the X and no guard left near it
     const C = this.chest, s = this.site;
@@ -216,22 +211,7 @@ export class Island {
   act(pl, a) {
     const G = this.G;
     switch (a.type) {
-      case 'goAshore': {
-        if ((this.phase !== 'hunt' && this.phase !== 'return') || !this.anchored || pl.dead || pl.ship !== G.ship) return false;
-        const s = this.site, n = parseInt(pl.id.split(':')[1]) || 0;
-        const side = Math.cos(s.yaw), fwd = -Math.sin(s.yaw);
-        const x = s.lx + (n - 1.5) * 1.1 * side - Math.sin(s.yaw) * 1.5, z = s.lz + (n - 1.5) * 1.1 * fwd - Math.cos(s.yaw) * 1.5;
-        const first = !this.playersAshore().length;
-        pl.goAshore(x, z, s.yaw);
-        if (!this.shoreCrew().some((m) => m.ashore)) this.crewAshore();
-        G.events.emit('wentAshore', { player: pl, first, pos: new THREE.Vector3(x, ground(x, z) + 1, z) });
-        return true;
-      }
-      case 'goAboard':
-        if (!this.ashore(pl)) return false;
-        pl.goAboard();
-        G.events.emit('wentAboard', { player: pl });
-        return true;
+      case 'row': return this.boat.row(pl, a);
       case 'openChest':
         if (!this.ashore(pl) || pl.dead || this.chest.state !== 'up' || flat(pl.headLocal, this.site.xx, this.site.xz) > 5) return false;
         this.chest.state = 'open';
@@ -265,15 +245,40 @@ export class Island {
     this.foes = [];
     G.ship.anchored = false; this.anchored = false;
     this.phase = 'off'; this.site = null; this.chest = { state: 'buried', t: 0 };
+    this.boat.stow();
     G.events.emit('treasureDone', { up: { ...this.up } });
     G.voyages.begin(G.voyages.n + 1);
   }
 
   // ---------- The landing party ----------
-  crewAshore() {
+  // Where Mags and Rosa should be: with whoever is ashore, else in the boat, else on deck
+  placeCrew(want) {
+    for (const m of this.shoreCrew()) {
+      const cur = m.ashore ? 'shore' : m.inBoat ? 'boat' : 'ship';
+      if (cur === want) continue;
+      if (want === 'ship') this.crewAboard();
+      else if (want === 'boat') { m.ashore = false; m.inBoat = true; m.away = null; this.boat.crewSit(m); }
+      else { m.inBoat = false; this.crewAshore([m]); }
+    }
+  }
+  // Tell everyone when a player lands, gets in the boat or climbs back aboard
+  noticeLandings() {
+    const G = this.G;
+    for (const pl of G.players) {
+      const was = this.frames.get(pl.id), now = pl.ship.id;
+      if (was === now) continue;
+      this.frames.set(pl.id, now);
+      if (was === undefined) continue;
+      if (now === 'shore') G.events.emit('wentAshore', { player: pl, first: this.playersAshore().length === 1, pos: new THREE.Vector3(pl.headLocal.x, pl.headLocal.y - 1, pl.headLocal.z) });
+      else if (now === 'boat') G.events.emit('boardedBoat', { player: pl, from: was === 'shore' ? 'shore' : 'ship' });
+      else if (now === G.ship.id && (was === 'boat' || was === 'shore')) G.events.emit('wentAboard', { player: pl });
+    }
+  }
+  crewAshore(list = this.shoreCrew()) {
     const s = this.site;
-    this.shoreCrew().forEach((m, i) => {
-      m.ashore = true; m.away = null;
+    list.forEach((m) => {
+      const i = SHORE_CREW.indexOf(m.name);
+      m.ashore = true; m.inBoat = false; m.away = null;
       const x = s.lx - Math.sin(s.yaw) * 0.5 + (i ? 1.6 : -1.6) * Math.cos(s.yaw), z = s.lz - Math.cos(s.yaw) * 0.5 - (i ? 1.6 : -1.6) * Math.sin(s.yaw);
       this.shore.root.add(m.p.g); m.p.g.position.set(x, ground(x, z), z); m.p.g.rotation.set(0, s.yaw, 0);
       m.p.sword.visible = true;
@@ -282,8 +287,8 @@ export class Island {
   crewAboard() {
     const S = this.G.ship;
     for (const m of this.shoreCrew()) {
-      if (!m.ashore) continue;
-      m.ashore = false; S.root.add(m.p.g); m.p.g.position.copy(m.home); m.p.g.rotation.set(0, 0, 0); m.p.sword.visible = false;
+      if (!m.ashore && !m.inBoat) continue;
+      m.ashore = false; m.inBoat = false; S.root.add(m.p.g); m.p.g.position.copy(m.home); m.p.g.rotation.set(0, 0, 0); m.p.sword.visible = false;
     }
   }
 
@@ -449,6 +454,8 @@ export class Island {
       foes: this.foes.map((f) => ({ id: f.id, state: f.state, hp: f.hp, look: f.look, seed: f.seed, big: f.big, group: f.group,
         pos: [r2(f.p.g.position.x), r2(f.p.g.position.y), r2(f.p.g.position.z)], rot: r2(f.p.g.rotation.y), attack: r2(f.p.attack), dead: f.p.dead })),
       crew: this.shoreCrew().filter((m) => m.ashore).map((m) => m.id),
+      boatCrew: this.shoreCrew().filter((m) => m.inBoat).map((m) => m.id),
+      boat: this.boat.snap(),
     };
   }
 
@@ -459,7 +466,8 @@ export class Island {
     Object.assign(this.up, sn.up);
     const a = sn.site;
     this.site = a ? { xx: a[0], xz: a[1], ...(a[2] !== null ? { lx: a[2], lz: a[3], bx: a[4], bz: a[5], yaw: a[6] } : {}) } : null;
-    for (const m of this.shoreCrew()) m.ashore = sn.crew.includes(m.id);
+    for (const m of this.shoreCrew()) { m.ashore = sn.crew.includes(m.id); m.inBoat = !!sn.boatCrew?.includes(m.id); }
+    this.boat.applySnap(sn.boat);
     const seen = new Set();
     for (const fs of sn.foes) {
       let f = this.byId(fs.id);
@@ -477,6 +485,7 @@ export class Island {
     const G = this.G;
     P.dolly.updateMatrixWorld(true);
     G.camera.getWorldPosition(_a);
+    if (this.boat.tryBoard(P, _a.x, _a.z)) { this.boat.clampRider(P); return; } // walked into the boat
     const lg = P.lastGood || (P.lastGood = { x: _a.x, z: _a.z });
     if (!walkable(_a.x, _a.z)) {
       P.dolly.position.x += lg.x - _a.x; P.dolly.position.z += lg.z - _a.z;
@@ -489,6 +498,7 @@ export class Island {
 
   // Things a VR hand can use here (called from player.findTarget)
   targets(P, hand, consider) {
+    this.boat.targets(P, hand, consider); // the ladder and the oars
     if (!this.ashore(P) || !this.site || P.dead) return;
     const C = this.chest.state;
     if (C === 'up' && this.v.chest) {
@@ -502,6 +512,7 @@ export class Island {
 
   // Desktop click ashore: the chest or a card you're looking at. True if it used the click.
   deskUse(P) {
+    if (this.boat.deskUse(P)) return true;
     if (!this.ashore(P) || !this.site) return false;
     const G = this.G, C = this.chest.state;
     G.camera.getWorldPosition(_a); G.camera.getWorldDirection(_b);
@@ -532,9 +543,6 @@ export class Island {
     const chest = buildChest(); add(chest.g); chest.g.position.set(s.xx, gx - 1.2, s.xz); chest.g.visible = false; this.v.chest = chest;
     if (s.lx !== undefined) {
       chest.g.rotation.y = s.yaw;
-      const boat = add(buildBoat()); boat.position.set(s.bx, 0.15, s.bz); boat.rotation.y = s.yaw + 0.4; this.v.boat = boat;
-      const rg = add(ring(1.0)); rg.position.set(s.lx + Math.sin(s.yaw) * 0.5, ground(s.lx, s.lz) + 0.06, s.lz + Math.cos(s.yaw) * 0.5); this.v.shoreRing = rg;
-      const lb = add(label('Stand here to\nrow back aboard', 512, 160, 1.1)); lb.position.copy(rg.position).setY(rg.position.y + 1.6); this.v.shoreLabel = lb;
       this.v.cards = KINDS.map((k, i) => {
         const tex = canvasTex(320, 420, (g, w, h) => {
           g.fillStyle = '#e8d6a8'; g.fillRect(0, 0, w, h);
@@ -551,15 +559,6 @@ export class Island {
     }
   }
 
-  // The deck ring (built once, on our ship)
-  deckRing() {
-    if (!this.deck) {
-      const S = this.G.ship, rg = ring(0.75); rg.position.set(DECK_RING.x, 0.05, DECK_RING.z); S.root.add(rg);
-      const lb = label('Stand here to\nrow ashore', 512, 160, 0.9); lb.position.set(DECK_RING.x, 2.0, DECK_RING.z); S.root.add(lb);
-      this.deck = { rg, lb };
-    }
-    return this.deck;
-  }
 
   // Bronze barrels and iron hull straps for the upgrades won so far
   applyLooks() {
@@ -588,26 +587,15 @@ export class Island {
     this.applyLooks();
     this.syncVisuals();
     const v = this.v, s = this.site;
-    const deck = this.deckRing();
-    const canRow = (this.phase === 'hunt' || this.phase === 'return') && this.anchored;
-    deck.rg.visible = deck.lb.visible = canRow;
+    this.boat.view(dt);
+    // Desktop: say how to get down the ladder the first time you walk up to it
+    if (G.mode === 'desktop' && !this.toldLadder && this.boat.nearLadderTop(P) && this.boat.canClimbDown()) { this.toldLadder = true; G.hud.msg('Look at the rope ladder and click to climb down', 3.5); }
     if (v.beam) {
       // Fades as you get close, so it doesn't fog up the view at the X
       G.camera.getWorldPosition(_a);
       v.beam.material.opacity = (0.22 + Math.sin(t * 2) * 0.06) * Math.min(1, Math.max(0.15, (flat(_a, s.xx, s.xz) - 4) / 25));
       v.beam.visible = this.chest.state === 'buried' || this.chest.state === 'digging';
     }
-    // Rings: stand in one for a moment to cross
-    let inRing = false;
-    if (G.started && !P.dead && canRow) {
-      if (P.ship === G.ship) inRing = Math.hypot(P.headLocal.x - DECK_RING.x, P.headLocal.z - DECK_RING.z) < 0.75;
-      else if (this.ashore(P) && v.shoreRing) inRing = flat(P.headLocal, v.shoreRing.position.x, v.shoreRing.position.z) < 1.0;
-    }
-    this.ringT = inRing ? this.ringT + dt : Math.min(0, this.ringT + dt);
-    if (this.ringT > 1.1) { this.ringT = -2.5; G.act({ type: P.ship === G.ship ? 'goAshore' : 'goAboard' }); }
-    const pulse = 1 + (inRing ? Math.max(0, this.ringT) * 0.4 : Math.sin(t * 3) * 0.05);
-    deck.rg.scale.setScalar(pulse);
-    if (v.shoreRing) { v.shoreRing.scale.setScalar(pulse); v.shoreRing.visible = v.shoreLabel.visible = this.phase === 'return' || this.ashore(P); v.shoreLabel.visible = v.shoreRing.visible && this.phase === 'return'; }
     // The chest: rises out of the sand, lid swings open, cards float up
     if (v.chest) {
       const C = this.chest.state, ch = v.chest, gy = ground(s.xx, s.xz);
@@ -653,7 +641,7 @@ export class Island {
   }
 
   updateMap(dt) {
-    const G = this.G, P = G.player, ashore = this.ashore(P) && this.site, vr = G.mode === 'vr';
+    const G = this.G, P = G.player, ashore = this.away(P) && this.site, vr = G.mode === 'vr';
     this.mapTex.image.style.display = ashore && G.mode === 'desktop' ? 'block' : 'none';
     const left = P.hands?.find((h) => h.side === 'left');
     if (left && this.mapSprite.parent !== left.grip) { left.grip.add(this.mapSprite); this.mapSprite.position.set(0, 0.1, 0.0); }
@@ -674,7 +662,8 @@ export class Island {
     const mark = (x, z, r, col) => { g.fillStyle = col; g.beginPath(); g.arc(x, z, r, 0, 6.3); g.fill(); };
     // The X
     g.strokeStyle = '#a01a10'; g.lineWidth = 2.2; g.beginPath(); g.moveTo(s.xx - 4, s.xz - 4); g.lineTo(s.xx + 4, s.xz + 4); g.moveTo(s.xx + 4, s.xz - 4); g.lineTo(s.xx - 4, s.xz + 4); g.stroke();
-    if (s.bx !== undefined) { g.fillStyle = '#5d3b22'; g.fillRect(s.bx - 1.5, s.bz - 1.5, 3, 3); }
+    const bt = this.boat;
+    if (bt.active && bt.rx !== null) { g.save(); g.translate(bt.rx, bt.rz); g.rotate(-bt.rh); g.fillStyle = '#5d3b22'; g.fillRect(-1.1, -3, 2.2, 6); g.restore(); }
     for (const f of this.foes) if (f.state === 'fight') mark(f.p.g.position.x, f.p.g.position.z, 1.6, '#c02010');
     for (const m of this.shoreCrew()) if (m.ashore) mark(m.p.g.position.x, m.p.g.position.z, 1.3, '#2a5aa0');
     for (const pl of G.players) if (pl !== P && this.ashore(pl)) mark(pl.headLocal.x, pl.headLocal.z, 1.6, '#e0b020');
@@ -687,7 +676,7 @@ export class Island {
     const where = dist < 4 ? 'You’re on the X!' : `X: ${Math.round(dist)} m ${ahead > 0.8 ? 'ahead' : ahead < -0.6 ? 'behind you' : right > 0 ? 'to your right' : 'to your left'}`;
     g.fillStyle = 'rgba(40,24,10,0.82)'; g.fillRect(8, 8, W - 16, 36);
     g.fillStyle = '#fff3cf'; g.font = 'bold 22px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(this.phase === 'return' ? 'Back to the boat!' : where, W / 2, 27, W - 24);
+    g.fillText(this.phase === 'return' ? (P.ship === this.boat.frame ? 'Row out to the ship!' : 'Back to the boat!') : where, W / 2, 27, W - 24);
     g.strokeStyle = '#6a4a22'; g.lineWidth = 6; g.beginPath(); g.roundRect(3, 3, W - 6, W - 6, 22); g.stroke();
     this.mapTex.needsUpdate = true;
   }
@@ -700,7 +689,7 @@ export class Island {
       const d = Math.hypot(s.xx - S.pos.x, s.xz - S.pos.z);
       return `Treasure! Sail to the gold light (${Math.round(d)} m)`;
     }
-    if (this.phase === 'return') return 'Prize taken! Row back aboard';
-    return { buried: 'At anchor: row ashore, find the X', digging: 'Digging up the treasure...', up: 'Open the chest!', open: 'Pick your prize!' }[this.chest.state] || null;
+    if (this.phase === 'return') return 'Prize taken! Row back to the ship';
+    return { buried: 'At anchor: down the ladder, row ashore, find the X', digging: 'Digging up the treasure...', up: 'Open the chest!', open: 'Pick your prize!' }[this.chest.state] || null;
   }
 }
