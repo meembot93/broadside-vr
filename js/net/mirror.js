@@ -32,6 +32,7 @@ export class Mirror {
     const err = snap.t + 0.05 - G.t;
     if (this.first || Math.abs(err) > 2) G.t = snap.t; else G.t += err * 0.1;
 
+    if (snap.adult !== undefined && snap.adult !== G.adult) G.setAdult(snap.adult); // the host's crew setting
     this.ships(snap, now);
     this.players(snap);
     this.crew(snap);

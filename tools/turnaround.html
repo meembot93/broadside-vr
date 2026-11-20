@@ -7,7 +7,8 @@
 import * as THREE from 'three';
 // Dev page: one pirate from four angles (front, 3/4, side, back) like a model sheet.
 // ?type=raider|rogue|...  ?seed=N
-import { makePerson } from '../js/people.js';
+import { makePerson, PEOPLE } from '../js/people.js';
+PEOPLE.adult = true;
 const q = new URLSearchParams(location.search);
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(devicePixelRatio); renderer.setSize(innerWidth, innerHeight); document.body.appendChild(renderer.domElement);

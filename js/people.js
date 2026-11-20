@@ -278,9 +278,19 @@ export const PIRATE_TYPES = Object.keys(TYPES);
 // Close-up detail: 2 = smooth and twice as round (with real fists) within LOD_DIST metres,
 // the original low-poly pirate beyond. Set PERSON_DETAIL to 1 to use only the low-poly one.
 export const PERSON_DETAIL = 2;
+
+// Game setting picked on the title screen: when off, the newer types are drawn as one of the
+// classic ones instead (same seed, so the same pirate always gets the same stand-in).
+export const PEOPLE = { adult: false };
+const STAND_IN = {
+  rogue: { type: 'swashbuckler', vest: 0x5a2a3a },
+  raider: { type: 'deckhand', bandana: 0xc8a040 },
+  buccaneer: { type: 'sailor', vest: 0x6a1a1a },
+};
 const LOD_DIST = 9;
 
 export function makePerson(o = {}) {
+  if (!PEOPLE.adult && STAND_IN[o.type]) o = { ...o, ...STAND_IN[o.type] };
   const R = rng(o.seed ?? Math.floor(Math.random() * 1e9));
   const pick = (a) => a[Math.floor(R() * a.length)];
   // Without a type, guess one from the old-style options so existing callers get variety.

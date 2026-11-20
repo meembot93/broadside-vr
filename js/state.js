@@ -31,6 +31,7 @@ function shipState(s) {
 export function snapshot(G) {
   return {
     t: r3(G.t), state: G.state, score: G.score, voyage: G.voyages.state(),
+    adult: !!G.adult,
     weather: G.weather ? { name: G.weather.name, night: r3(G.weather.night), storm: r3(G.weather.storm) } : null,
     ships: [G.ship, ...G.enemies.ships].map(shipState),
     players: G.players.map((p) => ({ id: p.id, name: p.name || null, ship: p.ship.id, head: v3(p.headLocal), health: r2(p.health), dead: p.dead })),
