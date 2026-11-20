@@ -1,8 +1,7 @@
 # Multiplayer: up to 4 friends on one ship
 
 **Status (v29): working.** One player hosts, up to three friends join with a 4-letter room code,
-everyone sees each other on deck and fights the same battle. Voice chat is not in the game yet:
-use a Meta Quest party or a Discord call alongside it.
+everyone sees each other on deck and fights the same battle. Voice chat is built in since v38.
 
 ## How to play together
 
@@ -18,6 +17,23 @@ use a Meta Quest party or a Discord call alongside it.
 
 Everyone needs the same version of the game (it's checked when you join). If it says the
 versions differ, both reload the page.
+
+## Voice chat (v38, `js/net/voice.js`)
+
+* The browser asks for the microphone when you press Host or Join (say Allow). Without a mic you
+  still hear everyone.
+* Each friend's voice comes from their pirate's head (WebAudio HRTF panner), and their name tag
+  lights up yellow while they talk.
+* **Your mic on/off:** B or Y in VR, M on desktop, or the button on the title screen.
+* **Mute a friend:** in VR put a hand on their head and press B or Y. On the title screen (out of
+  VR) every friend has a volume slider and a Mute button; this is remembered by name.
+* How: every pair of players has its own WebRTC audio call over the same PeerJS peer as the game
+  data (the higher seat calls the lower; the host is seat 0). Peer ids travel in `hello` and in
+  the snapshot's player list. PeerJS's free TURN relays are the fallback on strict networks, the
+  same as for game data; if voice ever fails where game data works, a paid TURN service
+  (a few dollars a month at this scale) can be added in `peerOptions()` in transport.js.
+* The two-tab test mode (`net=local`) has no voice. Test voice with a local PeerJS server and
+  Chromium's `--use-fake-device-for-media-stream --use-fake-ui-for-media-stream`.
 
 ## How it works (v29)
 
@@ -52,7 +68,6 @@ Messages: friend → host `hello`, `a` (actions), `p` (pose); host → friend `w
 
 ### Still to do
 
-* Voice chat in game (WebRTC audio placed on each avatar's head).
 * More weapons on the rack for 4 players (there are 2 muskets and 1 cutlass).
 * Two players on the wheel at once fight over it (last hand wins).
 * Host migration: if the host leaves, the game ends for everyone.

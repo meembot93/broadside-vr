@@ -131,6 +131,9 @@ export class RemotePlayer {
     // Name over their head
     this.tag.visible = !this.dead;
     this.tag.position.set(V.head.x, V.head.y + 0.42, V.head.z);
+    // Voice chat: the name lights up while they talk, and greys out if you muted them
+    this.tag.material.color.setHex(this.voiceMuted ? 0x6a6a6a : this.talking ? 0xffe27a : 0xffffff);
+    this.tag.scale.set(this.talking ? 0.56 : 0.5, this.talking ? 0.14 : 0.125, 1);
 
     // What they're holding
     for (const [id, ...ip] of pk.it || []) {

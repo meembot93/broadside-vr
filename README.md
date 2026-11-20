@@ -34,7 +34,8 @@ Works with friends: anyone can go ashore, whoever grabs a card first picks for t
 ## Play with friends
 
 Up to 4 players on one ship. One presses **Host a game** on the title screen and reads out the
-4-letter room code; friends type it next to **Join**. Then everyone presses Enter VR. Free and
+4-letter room code; friends type it next to **Join**. Then everyone presses Enter VR. Voice chat is
+built in (B/Y or M: mic on/off). Free and
 peer-to-peer (WebRTC via PeerJS). Details and troubleshooting: [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md).
 
 ## Controls

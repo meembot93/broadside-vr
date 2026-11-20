@@ -117,7 +117,7 @@ export class Mirror {
       }
       seen.add(sp.id);
       const pl = net.avatarFor(sp.id, sp.name);
-      pl.health = sp.health; pl.dead = sp.dead;
+      pl.health = sp.health; pl.dead = sp.dead; pl.peer = sp.peer || null;
       const s = this.shipById(sp.ship); if (s && G.t > pl.holdShipT) pl.ship = s;
     }
     for (const pl of [...G.players]) if (!seen.has(pl.id)) net.removeAvatar(pl.id);

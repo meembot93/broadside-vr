@@ -605,6 +605,10 @@ export class Player {
       const ab = btn(4);
       if (ab && !h.ab && !this.dead) { this.G.act({ type: 'order' }); this.haptic(h, 0.3, 30); }
       h.ab = ab;
+      // B or Y: voice chat. Mic on/off, or mute a friend by putting your hand on their head
+      const by = btn(5);
+      if (by && !h.by) this.voiceButton(h);
+      h.by = by;
       // Glove clenches and lights up so you can see the buttons are working
       h.glove.scale.set(1, sq ? 0.7 : 1, sq ? 0.8 : 1);
       h.glove.userData.palm.material.emissive.setHex(trig ? 0x7a3a10 : sq ? 0x2e2010 : 0x000000);
@@ -644,6 +648,7 @@ export class Player {
       if (e.code === 'Digit4') this.equip('hammer');
       if (e.code === 'Digit5') this.equip('bucket');
       if (e.code === 'KeyT') this.G.act({ type: 'order' });
+      if (e.code === 'KeyM') this.voiceButton(null);
       if (e.code === 'KeyG') { const d = this.G.camera.getWorldDirection(new THREE.Vector3()); this.G.act({ type: 'aimGrapple', dir: d }); this.fireGrapple(null); }
       if (e.code === 'Space') { e.preventDefault(); if (!this.G.act({ type: 'broadside' })) this.G.hud.msg('No target in the cannons’ arc', 1.5); }
     });
@@ -752,6 +757,28 @@ export class Player {
     this.dolly.rotation.x = 0; this.dolly.rotation.z = 0; this.dolly.position.y = 0;
     this.ship = ship;
     this.G.events.emit('playerCrossed', { player: this, ship, home: ship === this.G.ship });
+  }
+
+  // Voice chat button (B/Y in VR, M on desktop; see net/voice.js). A VR hand on a friend's head
+  // mutes or unmutes that friend; otherwise it switches your own microphone on or off.
+  voiceButton(h) {
+    const G = this.G, V = G.net?.voice;
+    if (!V?.on) return;
+    if (h) {
+      this.handPos(h, _a);
+      for (const pl of G.net.avatars.values()) {
+        if (_a.distanceTo(pl.p.head.getWorldPosition(_b)) > 0.5) continue;
+        const muted = !V.pref(pl.name).muted;
+        V.setPref(pl.name, { muted });
+        G.hud.msg(muted ? `${pl.name} muted` : `You can hear ${pl.name} again`, 2);
+        this.haptic(h, 0.4, 40);
+        return;
+      }
+    }
+    if (!V.stream) { G.hud.msg(V.denied ? 'No microphone: allow it for this site, then reload' : 'Microphone not ready', 3); return; }
+    V.setMuted(!V.muted);
+    G.hud.msg(V.muted ? 'Your mic is OFF' : 'Your mic is on', 2);
+    if (h) this.haptic(h, 0.3, 30);
   }
 
   // Where you start on deck: the captain at the wheel, friends (multiplayer) beside and ahead of it
