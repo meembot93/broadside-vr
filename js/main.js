@@ -23,7 +23,7 @@ import { Net } from './net/net.js';
 import { Island } from './island.js';
 import { VERSION as VERSION_NOW } from './version.js';
 import { PEOPLE } from './people.js';
-import { addDeckGuest } from './guest.js';
+import { DeckGuest } from './guest.js';
 
 const params = new URLSearchParams(location.search);
 // Crew setting picked on the title screen (remembered): 'kids' (default) or 'adult'. ?crew=adult works too.
@@ -66,7 +66,7 @@ G.player = new Player(G);          // you, on this headset
 G.players = [G.player];             // everyone on board; friends are added by net.js
 G.items = G.player.items;           // muskets and cutlass on the rack (shared by the crew of players)
 G.crew = new Crew(G);
-G.guest = addDeckGuest(G);       // Meem's Tripo-made pirate on deck (Adults setting only)
+G.guest = new DeckGuest(G);      // Meem's Tripo-made pirate strolling the deck (Adults setting only)
 G.grapples = new Grapples(G);
 G.damage = new Damage(G);         // leaks, fires and snapped masts you fix by hand
 G.hud = new Hud(G);
@@ -441,6 +441,7 @@ function view(dt) {
   if (creakT <= 0) { creakT = rand(4, 9); _a.set(rand(-2, 2), 1, rand(-6, 6)); S.root.localToWorld(_a); G.audio.creak(_a); }
 
   G.grapples.view(dt);
+  G.guest.update(dt);
   G.damage.view(dt);
   G.island.view(dt);
   camera.getWorldPosition(_a);
