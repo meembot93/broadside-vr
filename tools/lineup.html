@@ -7,7 +7,8 @@
 // Dev page: shows every pirate type side by side, plus the weapons. Open tools/lineup.html.
 // ?view=front|back|side|close  ?seed=N
 import * as THREE from 'three';
-import { makePerson, PIRATE_TYPES } from '../js/people.js';
+import { makePerson, PIRATE_TYPES, PEOPLE } from '../js/people.js';
+PEOPLE.adult = true;
 import { Kit, addCutlass, addMusket } from '../js/kit.js';
 const q = new URLSearchParams(location.search);
 const view = q.get('view') || 'front', seed = +(q.get('seed') || 1);

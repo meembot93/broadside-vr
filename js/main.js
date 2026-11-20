@@ -22,8 +22,14 @@ import { Weather, CONDITIONS } from './weather.js';
 import { Net } from './net/net.js';
 import { Island } from './island.js';
 import { VERSION as VERSION_NOW } from './version.js';
+import { PEOPLE } from './people.js';
 
 const params = new URLSearchParams(location.search);
+// Crew setting picked on the title screen (remembered): 'kids' (default) or 'adult'. ?crew=adult works too.
+const CREW_KEY = 'broadside.crew';
+let crewPick = params.get('crew');
+if (!crewPick) { try { crewPick = localStorage.getItem(CREW_KEY); } catch (e) { /* private mode */ } }
+PEOPLE.adult = crewPick === 'adult';
 const G = window.G = { t: 0, score: 0, mode: null, debug: params.has('debug'), state: 'play', stateT: 0 };
 // Multiplayer (net/net.js): this headset runs the game rules unless it joins a friend's game,
 // then G.isHost turns false and the host's snapshots drive everything. See docs/MULTIPLAYER.md.
@@ -87,6 +93,23 @@ for (const b of document.querySelectorAll('#weather button')) {
     try { localStorage.setItem(WX_KEY, wxPick); } catch (e) { /* private mode */ }
     for (const o of document.querySelectorAll('#weather button')) o.classList.toggle('on', o === b);
     applyWeatherPick();
+  });
+}
+
+// Kids / Adult crew. Changing it redraws our crew; ships and pirates met later follow it too.
+G.adult = PEOPLE.adult;
+G.setAdult = (on) => {
+  on = !!on; if (on === G.adult) return;
+  G.adult = PEOPLE.adult = on;
+  G.crew.refreshLooks();
+  for (const b of document.querySelectorAll('#rating button')) b.classList.toggle('on', (b.dataset.crew === 'adult') === on);
+};
+for (const b of document.querySelectorAll('#rating button')) {
+  b.classList.toggle('on', (b.dataset.crew === 'adult') === G.adult);
+  b.addEventListener('click', () => {
+    if (!G.isHost) return; // the host's setting applies to everyone
+    try { localStorage.setItem(CREW_KEY, b.dataset.crew); } catch (e) { /* private mode */ }
+    G.setAdult(b.dataset.crew === 'adult');
   });
 }
 
@@ -242,6 +265,7 @@ async function joinGame() {
     mpNote.textContent = 'You’re aboard! Press Enter VR (or Play on desktop). The host picks the weather and steers the voyage.';
     for (const el of [hostBtn, joinBtn, codeIn, nameIn]) el.style.display = 'none';
     document.getElementById('weather').style.display = 'none';
+    document.getElementById('rating').style.display = 'none';
   } catch (e) {
     const v = /^version:(\d+)/.exec(e.message);
     mpNote.textContent = v ? `The host has version ${v[1]} of the game and you have version ${VERSION_NOW}. Both of you: reload the page so you’re on the same one.` : (WHY[e.message] || `Couldn’t join (${e.message}).`);

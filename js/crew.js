@@ -32,6 +32,7 @@ export class Crew {
       { look: { type: 'raider', seed: 17 }, role: 'bosun', side: 0, home: [-1.9, -4.4], name: 'Goldie' },
       { look: { type: 'buccaneer', seed: 18 }, role: 'bosun', side: 0, home: [1.9, -4.6], name: 'Scarlett' },
     ];
+    this.defs = defs;
     this.members = defs.map((d, i) => {
       const p = makePerson({ ...d.look, cutlass: false }); // swords come out when there's a fight
       p.g.position.set(d.home[0], 0, d.home[1]);
@@ -44,6 +45,17 @@ export class Crew {
     G.ship.helmBy = 'player:0'; G.ship.helmTouchT = 0; G.ship.holdHeading = G.ship.heading;
     this.order = 'chase';
     this.awayT = 0;
+  }
+
+  // Redraw everyone (after the title-screen crew setting changes, see PEOPLE in people.js).
+  refreshLooks() {
+    this.members.forEach((m, i) => {
+      const old = m.p, np = makePerson({ ...this.defs[i].look, cutlass: false });
+      np.g.position.copy(old.g.position); np.g.rotation.copy(old.g.rotation);
+      np.pose = old.pose; np.sword.visible = old.sword.visible;
+      if (old.g.parent) { old.g.parent.add(np.g); old.g.parent.remove(old.g); }
+      m.p = np;
+    });
   }
 
   // The crew only lends a hand now and then, so the captain does the real fighting.
