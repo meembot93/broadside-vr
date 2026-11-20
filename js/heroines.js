@@ -72,7 +72,7 @@ export function heroBody(k, c, R) {
     for (const s of [-1, 1]) {
       const at = [s * BX, BY, bz], rot = [0.12, s * 0.28, 0];
       k.ball(BR, 1, skin, at, rot, BS);
-      k.add(new THREE.SphereGeometry(BR * 1.04, 12, 8, 0, Math.PI * 2, Math.PI * cut, Math.PI * (1 - cut)), col, at, rot, BS);
+      if (col !== null) k.add(new THREE.SphereGeometry(BR * 1.04, 12, 8, 0, Math.PI * 2, Math.PI * cut, Math.PI * (1 - cut)), col, at, rot, BS);
       if (trim !== null) k.add(new THREE.TorusGeometry(BR * 1.04 * Math.sin(Math.PI * cut), 0.009, 3, 14).rotateX(Math.PI / 2).translate(0, BR * 1.04 * Math.cos(Math.PI * cut), 0), trim, at, rot, BS);
     }
     k.box(0.007, BR * 0.85, 0.008, mix(skin, 0x6a3a2a, 0.35), [0, BY + 0.01, bz - BR * 0.58]);   // the shadow between them
@@ -90,12 +90,14 @@ export function heroBody(k, c, R) {
     k.add(new THREE.TorusGeometry(0.02, 0.007, 4, 8), GOLD, [0, BY - 0.02, bz - BR * 0.72]);   // gold ring between the cups
     // Frilled bottoms: white trim along the top edge
     k.add(lathe([[0.206, 0.848], [0.2, 0.866]]), FRILL, 0, 0, [1.01, 1, 0.83]);
-  } else if (c.top === 'wrap') {     // a black cloth wrapped round the chest, knotted at the back
-    bust(c.shirt, 0.16, vary(c.shirt, 0.35, R));
-    band(k, 1.225, 1.365, 0.016, c.shirt);
-    band(k, 1.225, 1.24, 0.024, vary(c.shirt, 0.3, R));
-    k.ball(0.028, 0, c.shirt, [0, 1.3, -front(1.3) + 0.012], 0, [1.3, 0.9, 0.7]);
-    for (const s of [-1, 1]) k.box(0.035, 0.09, 0.01, c.shirt, [s * 0.025, 1.25, -front(1.25) + 0.02], [-0.2, 0, s * 0.35]);
+  } else if (c.top === 'pasties') {  // bare, with small black X pasties like the reference
+    bust(null, 0, null);
+    const e = new THREE.Euler(), n = new THREE.Vector3();
+    for (const s of [-1, 1]) {
+      n.set(0, 0, -1).applyEuler(e.set(-0.05, -s * 0.3, 0)).normalize();
+      const at = [s * BX + n.x * BR * 0.98, BY - 0.012 + n.y * BR * 0.92, bz + n.z * BR * 0.9];
+      for (const a of [-1, 1]) k.add(facing(new THREE.BoxGeometry(0.058, 0.017, 0.007).rotateZ(a * 0.78), at, [n.x, n.y, n.z]), c.shirt);
+    }
   } else if (c.top === 'blouse') {
     bust(c.shirt, 0.43, vary(c.shirt, 0.06, R));
     band(k, 1.0, 1.27, 0.012, c.corset);                     // laced corset under the bust
