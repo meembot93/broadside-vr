@@ -29,6 +29,8 @@ export class Crew {
       { look: { type: 'swashbuckler', skin: 0xa8734f, seed: 14 }, role: 'bosun', side: 0, home: [-1.5, 3.1], name: 'Mags' },
       { look: { type: 'sailor', vest: 0x24304a, hat: 0x3a2a20, beard: 0x8a8a8a, patch: false, seed: 15 }, role: 'helmsman', side: 0, home: HELM_STANDBY, name: 'Hawkins' },
       { look: { type: 'rogue', seed: 16 }, role: 'bosun', side: 0, home: [1.6, 2.9], name: 'Rosa' },
+      { look: { type: 'raider', seed: 17 }, role: 'bosun', side: 0, home: [-1.9, -4.4], name: 'Goldie' },
+      { look: { type: 'buccaneer', seed: 18 }, role: 'bosun', side: 0, home: [1.9, -4.6], name: 'Scarlett' },
     ];
     this.members = defs.map((d, i) => {
       const p = makePerson({ ...d.look, cutlass: false }); // swords come out when there's a fight

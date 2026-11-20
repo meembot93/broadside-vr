@@ -36,6 +36,7 @@ const LOOKS = [
   { type: 'swashbuckler', vest: 0x3a2a20, sash: 0x1e1e1e, cutlass: true },
   { type: 'raider', cutlass: true },
   { type: 'rogue', bandana: 0x2a2424, cutlass: true },
+  { type: 'buccaneer', bandana: 0x2a2424, cutlass: true },
 ];
 
 // The boss: a captain in a crimson coat who stays at the wheel until you board, then comes for you.

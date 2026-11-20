@@ -1,6 +1,6 @@
 # Multiplayer: up to 4 friends on one ship
 
-**Status (v21): working.** One player hosts, up to three friends join with a 4-letter room code,
+**Status (v29): working.** One player hosts, up to three friends join with a 4-letter room code,
 everyone sees each other on deck and fights the same battle. Voice chat is not in the game yet:
 use a Meta Quest party or a Discord call alongside it.
 
@@ -19,7 +19,7 @@ use a Meta Quest party or a Discord call alongside it.
 Everyone needs the same version of the game (it's checked when you join). If it says the
 versions differ, both reload the page.
 
-## How it works (v21)
+## How it works (v29)
 
 | Piece | Where | What it does |
 |---|---|---|
