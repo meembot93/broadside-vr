@@ -3,6 +3,7 @@ import { halfWidth, RACK, WHEEL_MAX, BALL_SPEED } from './ship.js';
 import { waveHeight } from './waves.js';
 import { GRAPPLE_RANGE } from './grapple.js';
 import { ORDER_TEXT } from './crew.js';
+import { DECK_RING } from './island.js';
 import { clamp, angleWrap, canvasTex } from './util.js';
 import { Kit, addCutlass, addMusket } from './kit.js';
 import { buildHammer, buildBucket, HAMMER_HOME, BUCKET_HOME, TUB, LEAK_BLOWS, MAST_BLOWS } from './damage.js';
@@ -94,6 +95,10 @@ export class Player {
     this.vignette = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 8),
       new THREE.MeshBasicMaterial({ color: 0x8a0000, transparent: true, opacity: 0, side: THREE.BackSide, depthTest: false, depthWrite: false }));
     this.vignette.renderOrder = 999; this.vignette.visible = false; G.camera.add(this.vignette);
+    // A quick fade from black when you row ashore or back aboard (easier on the stomach than a jump)
+    this.blinker = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, side: THREE.BackSide, depthTest: false, depthWrite: false }));
+    this.blinker.renderOrder = 1000; this.blinker.visible = false; G.camera.add(this.blinker); this.blinkT = 0;
 
     const homeQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
     const mk = (kind, dz, home) => {
@@ -215,6 +220,7 @@ export class Player {
       _seg.closestPointToPoint(_a, true, _p);
       consider('cannon', _a.distanceTo(_p), 0.6, { c, point: c.breech.getWorldPosition(new THREE.Vector3()) });
     }
+    this.G.island?.targets(this, _a, consider); // ashore: the treasure chest and the prize cards
     return best;
   }
 
@@ -239,7 +245,7 @@ export class Player {
     if (t.kind === 'item') {
       const best = t.it;
       if (!this.G.act({ type: 'takeItem', item: best.id })) return;
-      h.held = best; best.holder = h; best.returning = false; best.hasPrev = false;
+      h.held = best; best.holder = h; best.returning = false; best.hasPrev = false; best.belt = false;
       if (best.kind === 'sword' || best.kind === 'hammer') {
         // Held like a real sword: blade comes up out of the top of the fist
         h.grip.add(best.obj); best.obj.position.set(0, 0, 0.02); best.obj.rotation.set(SWORD_TILT, 0, 0);
@@ -258,6 +264,7 @@ export class Player {
       return;
     }
     if (t.kind === 'keg') { this.lightKeg(h); return; }
+    if (t.kind === 'chest' || t.kind === 'card') { this.useTreasure(h, t); return; }
     if (t.kind === 'grapple') {
       // Aiming works by moving your hand: right swings the gun right, up raises it
       const gr = this.G.grapples;
@@ -289,8 +296,8 @@ export class Player {
     if (it === 'support') { if (h.supporting) h.supporting.support = null; h.supporting = null; }
     if (it && typeof it === 'object') {
       if (it.support) { const o = it.support; it.support = null; o.supporting = null; o.held = null; }
-      this.G.ship.root.attach(it.obj); it.holder = null; it.returning = true;
-      this.G.act({ type: 'dropItem', item: it.id });
+      if (this.ship.isShore) this.toBelt(it); // ashore: it hangs on your belt instead of flying home
+      else { this.G.ship.root.attach(it.obj); it.holder = null; it.returning = true; this.G.act({ type: 'dropItem', item: it.id }); }
     }
     h.held = null; h.glove.visible = true;
   }
@@ -303,6 +310,7 @@ export class Player {
     if (h.held) return;
     const t = this.findTarget(h);
     if (t && t.kind === 'keg') { this.lightKeg(h); return; }
+    if (t && (t.kind === 'chest' || t.kind === 'card')) { this.useTreasure(h, t); return; }
     if (t && t.kind === 'cannon') this.useCannon(h, t.c);
     else if (t) this.G.hud.msg('Squeeze GRIP (the side button) to grab', 2);
   }
@@ -546,6 +554,7 @@ export class Player {
   // Keep the player's head over the deck (and out of the masts).
   clampToDeck(depth = 0) {
     const ship = this.ship;
+    if (ship.isShore) { this.G.island.clampWalker(this); return; } // ashore: on dry land, feet on the ground
     this.dolly.updateMatrixWorld(true);
     this.G.camera.getWorldPosition(_a); ship.root.worldToLocal(_a);
     // Lashed alongside another ship: you can climb over the rail onto her deck
@@ -643,13 +652,18 @@ export class Player {
 
   equip(kind) {
     if (this.deskItem) {
-      this.G.ship.root.attach(this.deskItem.obj); this.deskItem.returning = true;
-      this.G.act({ type: 'dropItem', item: this.deskItem.id }); this.deskItem = null;
+      if (this.ship.isShore) this.toBelt(this.deskItem);
+      else {
+        this.G.ship.root.attach(this.deskItem.obj); this.deskItem.returning = true;
+        this.G.act({ type: 'dropItem', item: this.deskItem.id });
+      }
+      this.deskItem = null;
     }
     if (!kind) return;
-    const it = this.items.find((x) => x.kind === kind && !x.holder && !x.heldBy);
+    // Ashore you can only draw what you brought (it's on your belt)
+    const it = this.items.find((x) => x.kind === kind && !x.holder && (x.belt ? x.heldBy === this.id : !x.heldBy && !this.ship.isShore));
     if (!it || !this.G.act({ type: 'takeItem', item: it.id })) return;
-    this.deskItem = it; it.returning = false;
+    this.deskItem = it; it.returning = false; it.belt = false;
     this.G.camera.add(it.obj);
     if (kind === 'musket') { it.obj.position.set(0.2, -0.2, -0.28); it.obj.rotation.set(0, 0, 0); }
     else if (kind === 'bucket') { it.obj.position.set(0.32, -0.2, -0.62); it.obj.rotation.set(0.25, 0, 0); }
@@ -668,6 +682,7 @@ export class Player {
 
   deskUse() {
     const G = this.G, it = this.deskItem;
+    if (G.island?.deskUse(this)) return; // ashore: open the chest, take a prize
     const keg = this.ship.keg;
     if (keg && keg.fuse === -1 && keg.obj.visible) {
       G.camera.getWorldPosition(_a); keg.obj.getWorldPosition(_b); _b.y += 0.5;
@@ -734,6 +749,62 @@ export class Player {
     return [[0, 6.5], [0.9, 4.6], [-0.9, 4.6], [0, 3.6]][n % 4];
   }
 
+  // ---------- Treasure hunts (island.js) ----------
+  // The host moves you: ashore onto the beach at (x, z) facing yaw, or back onto our deck.
+  goAshore(x, z, yaw) {
+    const G = this.G;
+    G.island.shore.root.add(this.dolly); this.ship = G.island.shore;
+    this.dolly.position.set(x, 0, z);
+    if (G.mode === 'desktop') { this.dolly.rotation.set(0, 0, 0); this.yaw = yaw; this.pitch = 0; } else this.dolly.rotation.set(0, yaw, 0);
+    this.lastGood = null;
+    this.clampToDeck(); this.blink();
+  }
+  goAboard() {
+    const G = this.G;
+    this.unbelt();
+    G.ship.root.add(this.dolly); this.ship = G.ship;
+    this.dolly.position.set(DECK_RING.x - 0.9, 0, DECK_RING.z); this.dolly.rotation.set(0, 0, 0);
+    if (G.mode === 'desktop') this.yaw = 0;
+    this.clampToDeck(); this.blink();
+  }
+  blink() { this.blinkT = 1; }
+
+  // Hang an item on your belt (ashore): still yours, back in your hand with GRIP
+  toBelt(it) {
+    if (it.support) { const o = it.support; it.support = null; o.supporting = null; o.held = null; }
+    it.holder = null; it.belt = true; it.returning = false;
+    this.dolly.attach(it.obj);
+  }
+  // Everything on your belt goes back to the rack
+  unbelt() {
+    for (const it of this.items) {
+      if (!it.belt) continue;
+      it.belt = false;
+      if (it.heldBy !== this.id) continue;
+      this.G.ship.root.attach(it.obj); it.returning = true;
+      this.G.act({ type: 'dropItem', item: it.id });
+    }
+  }
+  // Belt items ride at your hips, the way you face
+  placeBelt() {
+    const cam = this.G.camera;
+    let n = 0;
+    for (const it of this.items) {
+      if (!it.belt || it.heldBy !== this.id) continue;
+      _a.copy(cam.position); // the camera sits in the dolly
+      cam.getWorldDirection(_b); this.dolly.getWorldQuaternion(_q).invert(); _b.applyQuaternion(_q);
+      const yaw = Math.atan2(-_b.x, -_b.z), side = it.kind === 'sword' ? -1 : 1, back = n++ * 0.12;
+      const rx = Math.cos(yaw), rz = -Math.sin(yaw), fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+      it.obj.position.set(_a.x + rx * side * 0.24 - fx * back, Math.max(0.5, _a.y * 0.56), _a.z + rz * side * 0.24 - fz * back);
+      it.obj.rotation.set(it.kind === 'musket' ? -1.2 : -1.35, yaw, 0, 'YXZ');
+    }
+  }
+  // The chest or a prize card under your hand
+  useTreasure(h, t) {
+    const r = t.kind === 'chest' ? this.G.act({ type: 'openChest' }) : this.G.act({ type: 'pickUpgrade', kind: t.upg });
+    if (r) this.haptic(h, 0.8, 90);
+  }
+
   // Back to our own deck in a hurry (the ship you were on is going down).
   returnHome() {
     if (this.ship === this.G.ship) return;
@@ -744,6 +815,7 @@ export class Player {
   respawn() {
     if (this.ship !== this.G.ship) { this.G.ship.root.add(this.dolly); this.ship = this.G.ship; }
     for (const h of this.hands) { this.release(h); h.evTrig = h.evSq = false; }
+    this.unbelt();
     const [x, z] = this.spawnSpot();
     this.dolly.position.set(x, 0, z); this.dolly.rotation.set(0, 0, 0);
     this.yaw = 0; this.pitch = 0;
@@ -763,7 +835,10 @@ export class Player {
   updateView(dt) {
     const G = this.G, ship = this.ship;
     if (this.cannonLine) { this.cannonLineT = (this.cannonLineT || 0) - dt; this.cannonLine.visible = this.cannonLineT > 0; }
-    if (this.orderCard) { this.orderCard.userData.set(this.orderText()); this.orderCard.visible = G.mode === 'vr' && !!this.orderCard.parent; }
+    if (this.orderCard) { this.orderCard.userData.set(this.orderText()); this.orderCard.visible = G.mode === 'vr' && !!this.orderCard.parent && !ship.isShore; }
+    this.placeBelt();
+    this.blinkT = Math.max(0, this.blinkT - dt * 1.6);
+    this.blinker.material.opacity = Math.min(1, this.blinkT * 1.4); this.blinker.visible = this.blinkT > 0;
     this.hurtFlash = Math.max(0, this.hurtFlash - dt * 2.5);
     const op = this.dead ? 0.85 : this.hurtFlash * 0.45 + Math.max(0, 0.5 - this.health / 100) * 0.4;
     this.vignette.material.opacity = op; this.vignette.visible = op > 0.01;

@@ -38,6 +38,7 @@ const LOOKS = [
   { type: 'rogue', bandana: 0x2a2424, cutlass: true },
   { type: 'buccaneer', bandana: 0x2a2424, cutlass: true },
 ];
+export const ENEMY_LOOKS = LOOKS; // island guards dress the same (island.js)
 
 // The boss: a captain in a crimson coat who stays at the wheel until you board, then comes for you.
 const BOSS_LOOK = { type: 'captain', coat: 0x7a1212, hat: 0x141010, sash: 0xc8a040, cutlass: true };

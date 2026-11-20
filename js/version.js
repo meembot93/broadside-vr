@@ -3,5 +3,5 @@
 //
 // EVERY change merged to main must bump VERSION by 1 and replace CHANGES with a few
 // words on what that change did (newest first, keep it to 2-4 short items).
-export const VERSION = 29;
-export const CHANGES = ['play with friends: host or join with a room code', 'see your mates on deck'];
+export const VERSION = 30;
+export const CHANGES = ['treasure hunts on the island after each voyage', 'ship upgrades from treasure chests'];

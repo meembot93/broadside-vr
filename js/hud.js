@@ -160,7 +160,7 @@ export class Hud {
     if (dmg) { g.font = 'bold 18px Georgia, serif'; g.fillStyle = '#a02a1a'; g.fillText(dmg, 20, 229); g.font = '24px Georgia, serif'; }
     g.fillStyle = '#3a2210';
     const V = G.voyages;
-    g.fillText(V.n ? `Voyage ${V.n}, fight ${Math.max(1, V.wave)} of ${V.waves.length}` : `Ships sunk: ${G.score}`, 20, 250);
+    g.fillText(V.phase === 'treasure' ? `Voyage ${V.n} won: treasure hunt!` : V.n ? `Voyage ${V.n}, fight ${Math.max(1, V.wave)} of ${V.waves.length}` : `Ships sunk: ${G.score}`, 20, 250);
     g.textAlign = 'right'; g.fillText(`${(S.speed * 1.94).toFixed(1)} kn`, w - 20, 250); g.textAlign = 'left';
     // Nearest enemy
     let best = null, bd = 1e9;
@@ -174,7 +174,10 @@ export class Hud {
       g.fillStyle = '#7a1a10'; g.fillText(`${best.boss ? best.boss.name : 'Enemy'} ${Math.round(bd)} m ${where}`, 20, 296, w - 40);
       g.font = '20px Georgia, serif'; g.fillStyle = '#3a2210';
       g.fillText(`(their hull ${Math.round((best.health / best.maxHealth) * 100)}%)`, 20, 322);
-    } else { g.fillText(V.phase === 'won' ? 'Voyage won! Huzzah!' : 'Horizon is clear', 20, 296); }
+    } else { g.fillText(G.island?.boardLine() || (V.phase === 'won' ? 'Voyage won! Huzzah!' : 'Horizon is clear'), 20, 296, w - 40); }
+    // Prizes won from treasure chests so far
+    const up = G.island?.up, prizes = up ? [['bronze', 'Bronze guns'], ['reload', 'Quick reload'], ['hull', 'Iron hull']].filter(([k]) => up[k]).map(([k, n]) => (up[k] > 1 ? `${n} x${up[k]}` : n)) : [];
+    if (prizes.length) { g.font = '18px Georgia, serif'; g.fillStyle = '#7a5210'; g.fillText('Prizes: ' + prizes.join(', '), 20, 274, w - 40); }
     this.boardTex.needsUpdate = true;
   }
 
@@ -217,7 +220,7 @@ export class Hud {
     const G = this.G;
     if (G.mode !== 'desktop') return;
     const held = G.player.deskItem ? G.player.deskItem.kind : 'empty hands';
-    const V = G.voyages, vtxt = V.n ? `Voyage ${V.n} fight ${Math.max(1, V.wave)}/${V.waves.length}` : `Sunk ${G.score}`;
+    const V = G.voyages, vtxt = G.island?.boardLine() || (V.n ? `Voyage ${V.n} fight ${Math.max(1, V.wave)}/${V.waves.length}` : `Sunk ${G.score}`);
     this.dom.innerHTML = `${G.net?.code ? `Room ${G.net.code} (${G.players.length} aboard) &nbsp;|&nbsp; ` : ''}Health ${Math.round(G.player.health)} &nbsp;|&nbsp; Hull ${Math.round(G.ship.health)} &nbsp;|&nbsp; ${vtxt} &nbsp;|&nbsp; Holding: ${held}${this.damageText() ? ' &nbsp;|&nbsp; ' + this.damageText() : ''}`;
   }
 }
