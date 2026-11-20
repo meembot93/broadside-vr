@@ -1,4 +1,6 @@
 {
+  "useGenerated": false,
+  "_useGenerated": "2026-11-20 Meem: only play Meem's own recordings; moments without one stay silent. Set true (and run make_voices.py) to bring the generated voices back.",
   "_about": "Pirate voice lines. Each group is played for one kind of game event (see js/voicelines.js). Run tools/voices/make_voices.py to turn this into sounds/voice/*.ogg and js/voicelist.js. 'Arr' is always growled with a rolled R.",
   "speakers": {
     "Hawkins": {
