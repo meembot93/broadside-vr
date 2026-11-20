@@ -19,6 +19,7 @@ def write_list():
     for key, grp in data['groups'].items():
         mine = [dict(id=cid, who=r['who'], text=r['text'], recorded=True) for cid, r in rec.items() if r['group'] == key]
         if mine: listing[key] = mine; continue
+        if not data.get('useGenerated', True): continue  # Meem's call: only real recordings
         listing[key] = [dict(id=f'{key}{i + 1}', who=grp['by'][i % len(grp['by'])], text=t) for i, t in enumerate(grp['lines'])]
     for cid, r in rec.items():  # recordings for moments that have no generated lines (custom ones)
         if r['group'] not in data['groups']: listing.setdefault(r['group'], []).append(dict(id=cid, who=r['who'], text=r['text'], recorded=True))
