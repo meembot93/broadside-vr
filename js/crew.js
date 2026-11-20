@@ -140,6 +140,7 @@ export class Crew {
       m.atkCD -= dt; m.fireCD -= dt; p.pose = null;
       let still;
       if (m.ashore) still = G.island.crewStep(m, dt); // the landing party (island.js)
+      else if (m.inBoat) still = G.island.boat.crewSit(m); // riding in the longboat (rowboat.js)
       else if (m.away || this.joinsBoarding(m)) still = this.boarding(m, dt);
       else if (fighters.length && this.defends(m)) still = this.defend(m, fighters, dt);
       else { p.sword.visible = false; still = this[m.role](m, dt, t); }

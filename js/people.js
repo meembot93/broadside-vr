@@ -347,7 +347,11 @@ export function animatePerson(p, dt, moving, t = 0) {
     else if (p.pose === 'ram') { const k = Math.sin(w * 1.4); al = ar = 1.25 + k * 0.35; p.body.rotation.x = -0.12 - k * 0.06; }
     else if (p.pose === 'point') { ar = 1.55; }
     else if (p.pose === 'aim') { al = 1.45; ar = 1.15; }
+    else if (p.pose === 'sit') { al = ar = 0.35; }
+    else if (p.pose === 'row') { const k = Math.sin(w * 1.4); al = ar = 1.2 + k * 0.45; p.body.rotation.x = -0.1 - k * 0.14; }
   }
+  // Sitting (in the longboat): legs stretched out in front
+  if (p.pose === 'sit' || p.pose === 'row') p.legL.rotation.x = p.legR.rotation.x = 1.45;
   if (p.attack >= 0) {
     p.attack += dt / 0.55;
     const u = p.attack;

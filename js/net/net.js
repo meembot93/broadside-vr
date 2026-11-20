@@ -199,8 +199,6 @@ export class Net {
     else if (m.t === 'cmd') {
       if (m.c === 'respawn') G.player.respawn();
       else if (m.c === 'returnHome') G.player.returnHome();
-      else if (m.c === 'goAshore') G.player.goAshore(m.x, m.z, m.yaw);
-      else if (m.c === 'goAboard') G.player.goAboard();
     } else if (m.t === 'bye') this.hostLost(m.why);
   }
 
@@ -271,7 +269,7 @@ export class Net {
       case 'hammer': r = 'hit'; break;
       case 'fillBucket': { const it = G.byId(a.item); if (!it || it.full) { r = false; send = false; } else { it.full = true; hold(it); } break; }
       case 'pourBucket': { const it = G.byId(a.item); if (!it || !it.full) { r = false; send = false; } else { it.full = false; hold(it); } break; }
-      case 'openChest': case 'pickUpgrade': case 'goAshore': case 'goAboard': r = true; break; // the host decides
+      case 'openChest': case 'pickUpgrade': case 'row': r = true; break; // the host decides
       case 'order': r = a.order || ORDERS[(ORDERS.indexOf(G.crew.order) + 1) % ORDERS.length]; break;
     }
     if (send) this.actQ.push(this.toShipSpace(a));

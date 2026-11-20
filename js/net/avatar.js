@@ -72,15 +72,6 @@ export class RemotePlayer {
     this.G.net?.command(this.id, 'returnHome');
   }
 
-  // Treasure hunts (island.js): row ashore onto the beach, or back aboard
-  goAshore(x, z, yaw) {
-    this.ship = this.G.island.shore; this.headLocal.set(x, 1.7, z); this.holdShipT = this.G.t + 1.5;
-    this.G.net?.command(this.id, 'goAshore', { x, z, yaw });
-  }
-  goAboard() {
-    this.ship = this.G.ship; this.headLocal.set(0.7, 1.7, 2.6); this.holdShipT = this.G.t + 1.5;
-    this.G.net?.command(this.id, 'goAboard');
-  }
 
   // A pose from their headset: { ship, h: head, l / r: hands (or 0), it: [[itemId, pose]], dk }
   // Each pose is [x, y, z, qx, qy, qz, qw] in the local space of `ship`.
@@ -111,7 +102,7 @@ export class RemotePlayer {
     g.visible = true;
     // On a deck the floor is y = 0; ashore (island.js, the shore's space is the world) it's the ground
     const bx = V.head.x + Math.sin(V.yaw) * 0.09, bz = V.head.z + Math.cos(V.yaw) * 0.09;
-    const floor = this.ship.isShore ? Math.max(0, landHeight(bx, bz)) : 0;
+    const floor = this.ship.isShore ? Math.max(0, landHeight(bx, bz)) : Math.min(0, V.head.y - 1.62); // below 0: on the ladder
     const sc = clamp((V.head.y - floor) / 1.66, 0.62, 1.15);
     g.scale.setScalar(sc);
     g.position.set(bx, floor, bz);

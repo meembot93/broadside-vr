@@ -139,7 +139,7 @@ export function wirePresentation(G) {
   });
   on('anchorDropped', ({ pos }) => {
     audio.splash(pos, 0.8); audio.bell();
-    hud.msg('Anchored! Stand in the gold ring to row ashore', 4);
+    hud.msg('Anchored! Climb down the rope ladder to the boat', 4);
     tip('weaponFirst', () => hud.msg('Take a weapon from the rack first', 3));
   });
   on('wentAshore', ({ player, first, pos }) => {
@@ -148,6 +148,17 @@ export function wirePresentation(G) {
       tip('map', () => hud.msg(desk() ? 'Your map is top right: find the X' : 'Your map is on your left wrist: find the X', 4));
       if (!desk()) tip('belt', () => hud.msg('Let go of a weapon and it hangs on your belt', 3.5));
     }
+  });
+  on('boardedBoat', ({ player, from }) => {
+    if (!isMe(player)) return;
+    if (from === 'ship') tip('row', () => hud.msg(desk() ? 'W to row, A and D to steer' : 'GRIP the oars and pull them toward you, or push the left stick', 4.5));
+  });
+  on('boatBeached', ({ pos }) => {
+    audio.thud(pos);
+    if (G.player.ship === G.island?.boat.frame) hud.msg('Ashore! Walk off the front of the boat', 3);
+  });
+  on('boatMoored', () => {
+    if (G.player.ship === G.island?.boat.frame) hud.msg(desk() ? 'Alongside! Click the ladder to climb up' : 'Alongside! GRIP the ladder and pull yourself up', 3.5);
   });
   const meAshore = () => G.island?.ashore(me);
   on('guardsAlerted', ({ pos, first, big }) => {
@@ -169,7 +180,7 @@ export function wirePresentation(G) {
   on('upgradeChosen', ({ name, level, player }) => {
     G.crew.cheer(); audio.cheer(); audio.bell();
     hud.msg(`Prize: ${name}${level > 1 ? ` (x${level})` : ''}!`, 3.5);
-    if (meAshore()) hud.msg('Row back: the gold ring by the boat', 4);
+    if (meAshore()) hud.msg('Back to the boat and row out to the ship', 4);
   });
   on('treasureDone', () => { hud.msg('Weigh anchor! On to the next voyage', 3.5); audio.bell(); });
 
