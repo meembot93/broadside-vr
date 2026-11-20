@@ -151,7 +151,7 @@ export function wirePresentation(G) {
   });
   on('boardedBoat', ({ player, from }) => {
     if (!isMe(player)) return;
-    if (from === 'ship') tip('row', () => hud.msg(desk() ? 'W to row, A and D to steer' : 'GRIP the oars and pull them toward you, or push the left stick', 4.5));
+    if (from === 'ship') tip('row', () => hud.msg(desk() ? 'Sit tight: the boatman rows you ashore. W, A, D to take over' : 'Sit tight: the boatman rows you ashore. GRIP the oars or push the stick to take over', 4.5));
   });
   on('boatBeached', ({ pos }) => {
     audio.thud(pos);

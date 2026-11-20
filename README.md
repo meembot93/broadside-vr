@@ -19,7 +19,7 @@ on Treasure Island, a big jungle island (terrain and trail in `js/land.js`, jung
 anchor. A rope ladder goes over the side facing the island with the longboat tied below it
 (`js/rowboat.js`). Climb down (VR: GRIP the rungs and pull, or TRIGGER on the ladder; desktop:
 click it; if your hands are empty a cutlass goes on your belt, and once you're sitting in the
-boat you reach up above your head to grab the ladder again), then row for the beach with Mags and Rosa (VR: GRIP the oars and pull them toward you,
+boat you reach up above your head to grab the ladder again), then sit tight: the boatman casts off and rows you and Mags and Rosa to the beach and back, or take over and row yourself (VR: GRIP the oars and pull them toward you,
 or push the left stick; desktop: W, A, D) and walk off the bow. With nobody in her, a boatman
 brings the boat to whoever is waiting at the ladder or on the beach. Your map is on your left
 wrist (top right on desktop), and weapons you let go of hang on your belt. From the beach a
