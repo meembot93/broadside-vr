@@ -82,7 +82,16 @@ export function heroBody(k, c, R) {
   const bust = (col, cut, trim) => {
     for (const s of [-1, 1]) {
       const at = [s * BX, BY, bz], rot = [0.12, s * 0.28, 0];
-      k.ball(BR, 1, skin, at, rot, BS);
+      if (col === null) {  // bare: a teardrop, sloping gently from the chest to a fuller, rounder bottom
+        const g = new THREE.IcosahedronGeometry(BR, 2), p = g.attributes.position;
+        for (let i = 0; i < p.count; i++) {
+          const y = p.getY(i) / BR, z = p.getZ(i);
+          if (y > -0.1 && z < 0) p.setZ(i, z * (1 - 0.62 * Math.min(1, (y + 0.1) / 1.1) ** 0.8));   // upper slope
+          if (y > 0) p.setY(i, p.getY(i) * 1.12);                                                        // longer upper part
+          if (y < 0) { p.setY(i, p.getY(i) * 0.92); if (z < 0) p.setZ(i, z * 1.06); }                   // full, round bottom
+        }
+        k.add(g, skin, at, rot, BS);
+      } else k.ball(BR, 1, skin, at, rot, BS);
       if (col !== null) k.add(new THREE.SphereGeometry(BR * 1.04, 12, 8, 0, Math.PI * 2, Math.PI * cut, Math.PI * (1 - cut)), col, at, rot, BS);
       if (trim !== null) k.add(new THREE.TorusGeometry(BR * 1.04 * Math.sin(Math.PI * cut), 0.009, 3, 14).rotateX(Math.PI / 2).translate(0, BR * 1.04 * Math.cos(Math.PI * cut), 0), trim, at, rot, BS);
     }
