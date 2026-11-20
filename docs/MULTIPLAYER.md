@@ -1,9 +1,64 @@
-# Multiplayer plan: up to 4 friends on one ship
+# Multiplayer: up to 4 friends on one ship
 
-The game is still single player. This doc covers what is already in place so friends can be
-added later as an extra step, not a rewrite, and the plan for that step.
+**Status (v29): working.** One player hosts, up to three friends join with a 4-letter room code,
+everyone sees each other on deck and fights the same battle. Voice chat is not in the game yet:
+use a Meta Quest party or a Discord call alongside it.
 
-## What is already in place
+## How to play together
+
+1. **Host:** open the game, type your name (optional) and press **Host a game**. A room code
+   like `KQZD` appears. Then press **Enter VR** as usual. The code is also on the Captain's Board.
+2. **Friends:** open the same game link, type the room code in the box next to **Join** and
+   press it. Once it says "You're aboard!", press **Enter VR**. Friends can join at any time,
+   even in the middle of a voyage.
+3. The host picks the weather and the voyage; everyone shares the ship, the cannons, the rack,
+   the hammer and bucket. One player down gets back up after a few seconds; if everyone is down
+   the crew drags you all back, like in single player.
+4. If the host leaves, everyone else goes back to the title screen after a few seconds.
+
+Everyone needs the same version of the game (it's checked when you join). If it says the
+versions differ, both reload the page.
+
+## How it works (v29)
+
+| Piece | Where | What it does |
+|---|---|---|
+| **Lobby** | `index.html`, `main.js` (Play with friends) | Host / Join buttons, name, room code. `?host` and `?join=CODE` do the same from the address bar. |
+| **Transport** | `js/net/transport.js` | WebRTC data channels through PeerJS (`lib/peerjs.min.js`, vendored, loaded only when you host or join). The free public PeerJS server (0.peerjs.com) introduces the headsets; game data then flows directly between them, or through PeerJS's free TURN relays if a network blocks direct connections. The room is the PeerJS id `broadside-vr-CODE`. A link that's silent for 15 s counts as gone. |
+| **Host** | `js/net/net.js` | Runs the game exactly as in single player. Every `G.events` event is forwarded to the friends as it happens; a full `G.snapshot()` (about 5 KB) plus everyone's pose goes out 20 times a second. Friends' actions arrive and go through the same `applyAction()` as the host's own hands. |
+| **Friend** | `js/net/net.js`, `js/net/mirror.js` | `G.isHost = false`: no rules run. `G.act()` sends the action to the host and guesses the result so hands and haptics respond at once (the snapshot corrects it). `mirror.js` builds and updates the world from snapshots: ships dead-reckon and ease toward the host's position, pirates walk toward theirs, cannonballs and the hook fly on their own. Events are replayed into `presentation.js`, so the smoke, sound and messages match. |
+| **Avatars** | `js/net/avatar.js` | `RemotePlayer`: a captain-coated pirate under the friend's head, floating gloves at their hands (VR), name tag, and the weapon or tool they hold. It is also the friend's game state on the host (id, ship, headLocal, health, dead), so the rules (boarders, burns, swords, kegs) treat them like the local player. |
+| **Ship-local positions** | `net.js` (POINTS / DIRS) | World positions in a friend's action (musket ray, bucket target) are sent in the local space of the ship they stand on and turned back into world space on the host, because a friend's view of the world is a few frames behind. |
+
+Messages: friend → host `hello`, `a` (actions), `p` (pose); host → friend `welcome`, `s` (snapshot
++ poses), `e` (events), `cmd` (respawn / returnHome for that friend's own player), `bye`.
+
+### If friends can't connect
+
+* "Couldn't reach the matchmaking server": the public PeerJS server is down or blocked. Try again
+  later, or run your own PeerJS server and add `?peerhost=yourhost:port` to everyone's link.
+* "The host didn't answer": usually a strict network (some work or school Wi-Fi). PeerJS tries its
+  TURN relays automatically. If it still fails, the fallback is option B below: a small relay
+  server (Cloudflare Durable Objects / PartyKit, roughly $0-5/month). The game code only talks to
+  `transport.js`, so only that file would change.
+
+### Testing
+
+* **Two tabs, no network:** add `&net=local` to both addresses (uses a BroadcastChannel), e.g.
+  `index.html?debug&net=local&host` and `index.html?debug&net=local&join=CODE`.
+* **Real WebRTC locally:** run a PeerJS server (`node -e "require('peer').PeerServer({port:9000,path:'/',host:'127.0.0.1'})"`)
+  and add `&peerhost=127.0.0.1:9000` to both tabs.
+* Playwright: one tab hosts, another joins; the IWER emulator works on either tab for VR hands.
+
+### Still to do
+
+* Voice chat in game (WebRTC audio placed on each avatar's head).
+* More weapons on the rack for 4 players (there are 2 muskets and 1 cutlass).
+* Two players on the wheel at once fight over it (last hand wins).
+* Host migration: if the host leaves, the game ends for everyone.
+* A friend's own musket flash and sound wait for the host's reply (a few hundredths of a second).
+
+## The groundwork it is built on (PR #3)
 
 | Piece | Where | What it is for later |
 |---|---|---|
@@ -19,7 +74,9 @@ A deterministic replay test (seeded randomness, fixed frame time, scripted input
 fighting with 4 sinkings, boarders and a player death) produced identical results before and
 after this restructure.
 
-## Recommended model: one headset is the host
+## The original plan (kept for reference)
+
+### Recommended model: one headset is the host
 
 * **Host** (whoever creates the game): runs the full game exactly as it does today. Every
   random roll, hit and enemy decision happens only here, so there is never any disagreement.

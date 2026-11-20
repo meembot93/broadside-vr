@@ -230,8 +230,21 @@ export function wirePresentation(G) {
     audio.hurt();
     for (const h of player.hands) player.haptic(h, 0.9, 140);
   });
-  on('playerDied', ({ player }) => { if (isMe(player)) hud.msg('You were cut down!', 3); });
-  on('playerRevived', ({ player }) => { if (isMe(player)) hud.msg('The crew dragged you back to the helm', 3); });
+  on('playerDied', ({ player }) => {
+    if (isMe(player)) hud.msg(G.players.length > 1 ? 'You were cut down! Back up in a few seconds' : 'You were cut down!', 3);
+    else if (player) hud.msg(`${player.name || 'A mate'} is down!`, 2.5);
+  });
+  on('playerRevived', ({ player }) => {
+    if (isMe(player)) hud.msg('The crew dragged you back to the helm', 3);
+    else if (player) hud.msg(`${player.name || 'A mate'} is back on their feet`, 2);
+  });
+
+  // ---- Friends (net/net.js) ----
+  on('friendJoined', ({ player, name }) => {
+    if (isMe(player)) { hud.msg('Welcome aboard!', 3); return; }
+    hud.msg(`${name} came aboard!`, 3.5); audio.bell();
+  });
+  on('friendLeft', ({ name }) => hud.msg(`${name} left the ship`, 3));
 
   // ---- Our ship ----
   on('ranAground', () => hud.msg('Ran aground! Steer back to open water', 2.5));

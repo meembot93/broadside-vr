@@ -145,6 +145,6 @@ export class Voyages {
   // For the Captain's Board and G.snapshot()
   state() {
     return { voyage: this.n, wave: this.wave, waves: this.waves.length, phase: this.phase, boss: this.bossName,
-      bossAlive: !!(this.bossShip && this.bossShip.hostile) };
+      bossAlive: !!(this.bossShip && this.bossShip.hostile), bossShip: this.bossShip ? this.bossShip.id : null };
   }
 }
