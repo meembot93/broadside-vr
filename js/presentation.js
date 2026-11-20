@@ -134,7 +134,7 @@ export function wirePresentation(G) {
 
   // ---- Treasure hunts (island.js) ----
   on('treasureMarked', () => {
-    hud.msg('Treasure! Sail for the gold light', 4.5);
+    hud.msg('Treasure! Sail for the gold light on the big island', 4.5);
     hud.msg('Walk away from the wheel and Hawkins takes us there', 4.5);
   });
   on('anchorDropped', ({ pos }) => {
@@ -161,10 +161,14 @@ export function wirePresentation(G) {
     if (G.player.ship === G.island?.boat.frame) hud.msg(desk() ? 'Alongside! Click the ladder to climb up' : 'Alongside! GRIP the ladder and pull yourself up', 3.5);
   });
   const meAshore = () => G.island?.ashore(me);
-  on('guardsAlerted', ({ pos, first, big }) => {
+  on('guardsAlerted', ({ pos, first, group }) => {
     audio.cheer(); audio.swoosh(pos);
-    if (first && meAshore()) hud.msg(big ? 'The treasure’s guards! Cut them down!' : 'Guards! Fight your way through!', 3);
+    if (first && meAshore()) hud.msg(['Pirates in their camp! Fight your way through!', 'Ambush! Watch for their muskets!', '', 'The temple guards! Cut them down!'][group] || 'Guards! Fight your way through!', 3);
   });
+  on('skeletonsRise', ({ pos }) => { audio.thud(pos); audio.woodHit(pos); if (meAshore()) hud.msg('The dead are rising from their graves!', 3); });
+  on('boulderLoosed', ({ pos }) => { audio.thud(pos); audio.cannon(pos); if (meAshore()) hud.msg('Look out above! Get to the side of the path!', 3); });
+  on('boulderHit', ({ pos }) => { fx.debris(pos, 10); audio.thud(pos); });
+  on('boulderSmashed', ({ pos }) => { fx.debris(pos, 24); audio.woodHit(pos); audio.thud(pos); });
   on('guardKilled', ({ left }) => { if (meAshore() && !left) hud.msg('That’s the last of them!', 2.5); });
   on('treasureGuarded', () => meAshore() && hud.msg('Guards still watch the X. Clear them first!', 3));
   on('digStarted', ({ pos }) => { if (meAshore()) hud.msg('Dig, lads, dig!', 2.5); audio.thud(pos); });

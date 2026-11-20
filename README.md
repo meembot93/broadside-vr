@@ -14,14 +14,17 @@ and a harder voyage begins; lose the ship and the voyage starts over. For testin
 `?voyage=2` starts on voyage 2 and `?wave=3` jumps to the boss fight.
 
 After each voyage won there's a **treasure hunt** (`js/island.js`): a gold light marks treasure
-on the islet. Sail close (or walk away from the wheel and Hawkins sails there) and the ship drops
+on Treasure Island, a big jungle island (terrain and trail in `js/land.js`, jungle and ruins in
+`js/isle.js`, skeletons in `js/foes.js`). Sail close (or walk away from the wheel and Hawkins sails there) and the ship drops
 anchor. A rope ladder goes over the side facing the island with the longboat tied below it
 (`js/rowboat.js`). Climb down (VR: GRIP the rungs and pull, or TRIGGER on the ladder; desktop:
 click it), then row for the beach with Mags and Rosa (VR: GRIP the oars and pull them toward you,
 or push the left stick; desktop: W, A, D) and walk off the bow. With nobody in her, a boatman
 brings the boat to whoever is waiting at the ladder or on the beach. Your map is on your left
-wrist (top right on desktop), and weapons you let go of hang on your belt. Fight
-past the guards to the X, the crew digs up a chest, open it and take one prize: bronze cannons
+wrist (top right on desktop), and weapons you let go of hang on your belt. From the beach a
+winding trail climbs through the jungle past a pirate camp, an ambush with musket snipers, a
+graveyard where skeletons rise, and a rolling-boulder trap, to the temple ruins on the summit.
+Fight past the guards to the X, the crew digs up a chest, open it and take one prize: bronze cannons
 (+35% damage), drilled gun crews (25% faster reload) or an iron-banded hull (+50 hull). Prizes
 stack and last the whole run. Row back, climb the ladder, and the next voyage begins.
 Works with friends: anyone can go ashore, whoever grabs a card first picks for the crew.
