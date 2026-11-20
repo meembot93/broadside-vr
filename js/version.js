@@ -3,5 +3,5 @@
 //
 // EVERY change merged to main must bump VERSION by 1 and replace CHANGES with a few
 // words on what that change did (newest first, keep it to 2-4 short items).
-export const VERSION = 39;
-export const CHANGES = ['boatman rows you ashore', 'grab the oars to take over'];
+export const VERSION = 40;
+export const CHANGES = ['island trail walkable to the top', 'wider trail, tents moved aside'];

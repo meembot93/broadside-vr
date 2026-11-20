@@ -203,27 +203,40 @@ function plantJungle(plantMat, solidMat, rockMat) {
 
 // ---------- Props: the camp, the graveyard, the temple, signs and torches ----------
 const STONE = 0x8a8478, STONE_D = 0x6a665e, MOSSY = 0x5e6a48, WOOD = 0x6a4a2a, WOOD_D = 0x4a321c, CLOTH = 0xcdbb94, ROPE = 0xc8b080;
-function solid(x, z, r) { ISLE_SOLIDS.push({ x, z, r }); }
+// Something you can't walk through. Whatever it is, the middle of the trail always stays open.
+function solid(x, z, r) {
+  const dp = islePathDist(x, z);
+  if (dp < r + 1.3) r = dp - 1.3;
+  if (r > 0.1) ISLE_SOLIDS.push({ x, z, r });
+}
+// Nudge a prop's spot sideways off the trail so it sits beside it, not on it
+function besideTrail(x, z, r) {
+  for (let i = 0; i < 40 && islePathDist(x, z) < PATH_HALF + r + 0.4; i++) {
+    const e = 0.5, gx = islePathDist(x + e, z) - islePathDist(x - e, z), gz = islePathDist(x, z + e) - islePathDist(x, z - e), L = Math.hypot(gx, gz) || 1;
+    x += (gx / L) * 0.5; z += (gz / L) * 0.5;
+  }
+  return [x, z];
+}
 
 function campProps(k, flames) {
   const c = isleClearing('camp'), gy = (x, z) => ground(x, z);
   // Two tents, opening toward the fire
   for (const [du, dv, rot] of [[-7, -3, 0.9], [5, -7, -0.4]]) {
-    const x = c.x + du, z = c.z + dv, y = gy(x, z);
+    const [x, z] = besideTrail(c.x + du, c.z + dv, 1.6), y = gy(x, z);
     k.add(new THREE.CylinderGeometry(1.5, 1.5, 3, 3, 1).rotateZ(Math.PI / 2).rotateY(rot).scale(1, 1.05, 1), CLOTH, [x, y + 0.75, z]);
     k.box(0.08, 1.8, 0.08, WOOD_D, [x + Math.cos(rot) * 1.5, y + 0.9, z - Math.sin(rot) * 1.5]);
     solid(x, z, 1.6);
   }
   // Campfire: a ring of stones and logs
-  const fx = c.x + 0.5, fz = c.z + 1, fy = gy(fx, fz);
+  const [fx, fz] = besideTrail(c.x + 0.5, c.z + 1, 0.8), fy = gy(fx, fz);
   for (let i = 0; i < 9; i++) { const a = (i / 9) * 6.28; k.add(new THREE.DodecahedronGeometry(0.18, 0), STONE_D, [fx + Math.cos(a) * 0.6, fy + 0.08, fz + Math.sin(a) * 0.6]); }
   for (let i = 0; i < 4; i++) k.cyl(0.07, 0.07, 0.9, 5, WOOD_D, [fx, fy + 0.15, fz], [Math.PI / 2 - 0.25, (i / 4) * 3.14, 0]);
   flames.push({ x: fx, y: fy + 0.25, z: fz, s: 1.4 });
   solid(fx, fz, 0.7);
   // Crates and barrels, a skull flag
-  for (const [du, dv] of [[8, 4], [8.8, 5.2], [7.6, 5.4]]) { const x = c.x + du, z = c.z + dv; k.box(0.8, 0.8, 0.8, WOOD, [x, gy(x, z) + 0.4, z], [0, rr(0, 1), 0]); solid(x, z, 0.5); }
-  for (const [du, dv] of [[-4, 6], [-3.2, 6.6]]) { const x = c.x + du, z = c.z + dv; k.cyl(0.38, 0.38, 1, 10, WOOD, [x, gy(x, z) + 0.5, z]); k.cyl(0.4, 0.4, 0.06, 10, 0x2a2c31, [x, gy(x, z) + 0.75, z]); solid(x, z, 0.45); }
-  const px = c.x - 9, pz = c.z + 3, py = gy(px, pz);
+  for (const [du, dv] of [[8, 4], [8.8, 5.2], [7.6, 5.4]]) { const [x, z] = besideTrail(c.x + du, c.z + dv, 0.5); k.box(0.8, 0.8, 0.8, WOOD, [x, gy(x, z) + 0.4, z], [0, rr(0, 1), 0]); solid(x, z, 0.5); }
+  for (const [du, dv] of [[-4, 6], [-3.2, 6.6]]) { const [x, z] = besideTrail(c.x + du, c.z + dv, 0.45); k.cyl(0.38, 0.38, 1, 10, WOOD, [x, gy(x, z) + 0.5, z]); k.cyl(0.4, 0.4, 0.06, 10, 0x2a2c31, [x, gy(x, z) + 0.75, z]); solid(x, z, 0.45); }
+  const [px, pz] = besideTrail(c.x - 9, c.z + 3, 0.3), py = gy(px, pz);
   k.cyl(0.06, 0.07, 5, 6, WOOD_D, [px, py + 2.5, pz]);
   k.box(1.3, 0.85, 0.03, 0x1a1a1e, [px + 0.68, py + 4.4, pz]);
   k.ball(0.17, 1, 0xe8e0cc, [px + 0.68, py + 4.5, pz + 0.03], 0, [1, 1, 0.3]);
@@ -251,7 +264,7 @@ function gravesProps(k) {
     const a = (i / 14) * 3.6 + 2.2, x = c.x + Math.cos(a) * (c.r + 0.6), z = c.z + Math.sin(a) * (c.r + 0.6), h = rr(0.5, 1.3);
     k.box(1.6, h, 0.5, i % 2 ? STONE : STONE_D, [x, gy(x, z) + h / 2 - 0.1, z], [0, -a + Math.PI / 2, rr(-0.06, 0.06)]);
   }
-  const tx = c.x - 3, tz = c.z + 2, ty = gy(tx, tz);
+  const [tx, tz] = besideTrail(c.x - 3, c.z + 2, 0.4), ty = gy(tx, tz);
   k.tube([[tx, ty - 0.2, tz], [tx + 0.2, ty + 2, tz], [tx - 0.3, ty + 3.6, tz + 0.2], [tx - 1.2, ty + 4.4, tz + 0.5]], 0.2, 0x4a3e32, 5);
   k.tube([[tx + 0.1, ty + 2.6, tz], [tx + 1.2, ty + 3.4, tz - 0.3], [tx + 1.8, ty + 3.6, tz - 0.8]], 0.1, 0x4a3e32, 4);
   solid(tx, tz, 0.4);
