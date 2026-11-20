@@ -32,7 +32,7 @@ function buildSword() {
 // A dark leather glove with a flared gauntlet cuff. The material is the glove's own so it
 // can glow a little when you squeeze or pull the trigger.
 const GLOVE = 0x2e2622, GLOVE_DARK = 0x221c19;
-function buildGlove() {
+export function buildGlove() {
   const g = new THREE.Group(), k = new Kit();
   k.box(0.078, 0.042, 0.095, GLOVE, [0, 0, 0.005]);                                  // back of hand
   for (let i = 0; i < 4; i++) {                                                        // fingers, curled a little
@@ -189,7 +189,7 @@ export class Player {
     }
     if (best) return best;
     for (const it of this.items) {
-      if (it.holder || this.deskItem === it) continue;
+      if (it.holder || this.deskItem === it || (it.heldBy && it.heldBy !== this.id)) continue; // in a friend's hand
       if (it.kind === 'hammer') { _seg.start.set(0, 0, 0.06); _seg.end.set(0, 0, -0.32); }
       else if (it.kind === 'bucket') { _seg.start.set(0, 0.1, -0.1); _seg.end.set(0, -0.2, -0.1); }
       else { _seg.start.set(0, 0, it.kind === 'sword' ? 0.08 : 0.3); _seg.end.set(0, 0, it.kind === 'sword' ? -0.45 : -0.6); }
@@ -728,6 +728,12 @@ export class Player {
     this.G.events.emit('playerCrossed', { player: this, ship, home: ship === this.G.ship });
   }
 
+  // Where you start on deck: the captain at the wheel, friends (multiplayer) beside and ahead of it
+  spawnSpot() {
+    const n = parseInt(this.id.split(':')[1]) || 0;
+    return [[0, 6.5], [0.9, 4.6], [-0.9, 4.6], [0, 3.6]][n % 4];
+  }
+
   // Back to our own deck in a hurry (the ship you were on is going down).
   returnHome() {
     if (this.ship === this.G.ship) return;
@@ -738,7 +744,8 @@ export class Player {
   respawn() {
     if (this.ship !== this.G.ship) { this.G.ship.root.add(this.dolly); this.ship = this.G.ship; }
     for (const h of this.hands) { this.release(h); h.evTrig = h.evSq = false; }
-    this.dolly.position.set(0, 0, 6.5); this.dolly.rotation.set(0, 0, 0);
+    const [x, z] = this.spawnSpot();
+    this.dolly.position.set(x, 0, z); this.dolly.rotation.set(0, 0, 0);
     this.yaw = 0; this.pitch = 0;
     this.health = 100; this.dead = false; this.hurtFlash = 0;
   }

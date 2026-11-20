@@ -19,11 +19,13 @@ import { wirePresentation } from './presentation.js';
 import { wireVoices } from './voicelines.js';
 import { snapshot } from './state.js';
 import { Weather, CONDITIONS } from './weather.js';
+import { Net } from './net/net.js';
+import { VERSION as VERSION_NOW } from './version.js';
 
 const params = new URLSearchParams(location.search);
 const G = window.G = { t: 0, score: 0, mode: null, debug: params.has('debug'), state: 'play', stateT: 0 };
-// Multiplayer groundwork. For now this headset is always the host (it runs the game rules)
-// and the only player. See docs/MULTIPLAYER.md for how friends will join later.
+// Multiplayer (net/net.js): this headset runs the game rules unless it joins a friend's game,
+// then G.isHost turns false and the host's snapshots drive everything. See docs/MULTIPLAYER.md.
 G.isHost = true;
 G.events = new Events();
 G.ids = new Ids();
@@ -53,13 +55,14 @@ G.combat = new Combat(G);
 G.enemies = new Enemies(G);
 G.voyages = new Voyages(G);       // waves of enemies, boss fights, victory (see voyages.js)
 G.player = new Player(G);          // you, on this headset
-G.players = [G.player];             // everyone on board; friends get added here later
+G.players = [G.player];             // everyone on board; friends are added by net.js
 G.items = G.player.items;           // muskets and cutlass on the rack (shared by the crew of players)
 G.crew = new Crew(G);
 G.grapples = new Grapples(G);
 G.damage = new Damage(G);         // leaks, fires and snapped masts you fix by hand
 G.hud = new Hud(G);
 G.player.setupVR(renderer);
+G.net = new Net(G);
 
 // Time of day and weather. Picked on the title screen (remembered), or ?weather=night|storm|stormNight|day|random.
 // Voyages can change it any time with G.weather.set(name).
@@ -72,11 +75,12 @@ const randomWeather = () => { const k = Object.keys(CONDITIONS).filter((n) => n 
 const applyWeatherPick = () => G.weather.set(wxPick === 'random' ? randomWeather() : wxPick, { instant: true });
 applyWeatherPick();
 // "Surprise me": each new voyage sails into different weather, and a storm rolls in when the boss appears
-G.events.on('voyageWon', () => { if (wxPick === 'random') G.weather.set(randomWeather()); });
-G.events.on('bossArrived', () => { if (wxPick === 'random' && G.weather.target.storm < 1) G.weather.set(G.weather.target.night ? 'stormNight' : 'storm'); });
+G.events.on('voyageWon', () => { if (G.isHost && wxPick === 'random') G.weather.set(randomWeather()); });
+G.events.on('bossArrived', () => { if (G.isHost && wxPick === 'random' && G.weather.target.storm < 1) G.weather.set(G.weather.target.night ? 'stormNight' : 'storm'); });
 for (const b of document.querySelectorAll('#weather button')) {
   b.classList.toggle('on', b.dataset.wx === wxPick);
   b.addEventListener('click', () => {
+    if (!G.isHost) return; // the host picks the weather
     wxPick = b.dataset.wx;
     try { localStorage.setItem(WX_KEY, wxPick); } catch (e) { /* private mode */ }
     for (const o of document.querySelectorAll('#weather button')) o.classList.toggle('on', o === b);
@@ -91,6 +95,9 @@ G.byId = (id) => {
     if (s.id === id) return s;
     for (const c of s.cannons) if (c.id === id) return c;
   }
+  if (id.startsWith('crew:')) return G.crew.members.find((m) => m.id === id) || null;
+  const crew = /^(ship:\d+)\/(crew|keg)/.exec(id);
+  if (crew) { const s = [G.ship, ...G.enemies.ships].find((x) => x.id === crew[1]); return s ? (crew[2] === 'keg' ? s.keg : s.crew.find((m) => m.id === id)) || null : null; }
   return G.items.find((x) => x.id === id) || G.playerById(id) || G.enemies.boarders.find((b) => b.id === id) || G.damage.byId(id) || null;
 };
 G.playerById = (id) => G.players.find((p) => p.id === id) || null;
@@ -104,7 +111,13 @@ G.snapshot = () => snapshot(G);
 wirePresentation(G);
 wireVoices(G);
 // Rules that react to events:
-G.events.on('playerDied', () => { G.state = 'dead'; G.stateT = 3; });
+// Everyone down: the crew drags you all back (single player: you). With friends aboard, one
+// player down just waits a few seconds and gets back up (see simulate).
+G.events.on('playerDied', ({ player }) => {
+  if (!G.isHost) return;
+  player.deadT = 0;
+  if (G.players.every((pl) => pl.dead)) { G.state = 'dead'; G.stateT = 3; }
+});
 G.events.on('shipRefitted', () => G.damage.reset()); // fresh planks and masts between voyages
 
 function resetGame() {
@@ -174,6 +187,60 @@ deskBtn.addEventListener('click', () => {
   renderer.domElement.requestPointerLock?.();
   begin();
 });
+// ---------- Play with friends (net/net.js) ----------
+const nameIn = document.getElementById('nameIn'), codeIn = document.getElementById('codeIn');
+const hostBtn = document.getElementById('hostBtn'), joinBtn = document.getElementById('joinBtn');
+const mpNote = document.getElementById('mpNote'), roomEl = document.getElementById('room');
+const NAME_KEY = 'broadside.name';
+try { nameIn.value = localStorage.getItem(NAME_KEY) || ''; } catch (e) { /* private mode */ }
+const myName = () => {
+  const n = nameIn.value.trim().slice(0, 14);
+  try { localStorage.setItem(NAME_KEY, n); } catch (e) { /* private mode */ }
+  return n;
+};
+const WHY = {
+  network: 'Couldn’t reach the matchmaking server. Check the headset is online and try again.',
+  noroom: 'No game found with that code. Check the code, and that the host has pressed “Host a game”.',
+  full: 'That ship is full (4 players).',
+  timeout: 'The host didn’t answer. Try again; if it keeps failing, your network may block direct connections (see the help page).',
+  closed: 'The host closed the connection.',
+};
+const mpBusy = (on) => { hostBtn.disabled = joinBtn.disabled = on; };
+async function hostGame() {
+  mpBusy(true); mpNote.textContent = 'Opening a room…';
+  try {
+    const code = await G.net.host(myName());
+    roomEl.textContent = `Room code: ${code}`; roomEl.style.display = 'block';
+    mpNote.textContent = 'Friends: open the game, type this code and press Join. Then everyone presses Enter VR. Friends can join any time.';
+    for (const el of [hostBtn, joinBtn, codeIn, nameIn]) el.style.display = 'none';
+  } catch (e) { mpNote.textContent = WHY[e.message] || `Couldn’t open a room (${e.message}).`; mpBusy(false); }
+}
+async function joinGame() {
+  const code = codeIn.value.trim().toUpperCase();
+  if (!/^[A-Z]{4}$/.test(code)) { mpNote.textContent = 'Type the 4-letter room code from the host’s screen first.'; codeIn.focus(); return; }
+  if (G.started) { mpNote.textContent = 'Reload the page to join a friend’s game.'; return; }
+  mpBusy(true); mpNote.textContent = `Looking for ship ${code}…`;
+  try {
+    await G.net.join(code, myName());
+    roomEl.textContent = `Aboard ship ${code}`; roomEl.style.display = 'block';
+    mpNote.textContent = 'You’re aboard! Press Enter VR (or Play on desktop). The host picks the weather and steers the voyage.';
+    for (const el of [hostBtn, joinBtn, codeIn, nameIn]) el.style.display = 'none';
+    document.getElementById('weather').style.display = 'none';
+  } catch (e) {
+    const v = /^version:(\d+)/.exec(e.message);
+    mpNote.textContent = v ? `The host has version ${v[1]} of the game and you have version ${VERSION_NOW}. Both of you: reload the page so you’re on the same one.` : (WHY[e.message] || `Couldn’t join (${e.message}).`);
+    mpBusy(false);
+  }
+}
+// Closing the tab: tell the others straight away instead of letting them wait for a timeout
+window.addEventListener('pagehide', () => G.net.leave());
+hostBtn.addEventListener('click', hostGame);
+joinBtn.addEventListener('click', joinGame);
+codeIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinGame(); });
+// ?host opens a room straight away; ?join=ABCD joins one (handy for links and testing)
+if (params.has('host')) hostGame();
+else if (params.get('join')) { codeIn.value = params.get('join'); joinGame(); }
+
 document.addEventListener('pointerlockchange', () => {
   if (G.mode === 'desktop' && !document.pointerLockElement) G.hud.msg('Click to keep playing', 2);
 });
@@ -232,6 +299,8 @@ function simulate(dt) {
   G.t += dt;
   const t = G.t, S = G.ship, playing = !!G.mode;
 
+  if (!G.isHost) { clientFrame(dt, playing); view(dt); return; }
+
   if (playing) {
     G.player.update(dt);
     S.applyHelm();
@@ -251,6 +320,10 @@ function simulate(dt) {
     G.damage.step(dt);
     landCollisions(dt);
 
+    // A friend (or you) down while others still stand: back on your feet after a few seconds
+    if (G.state === 'play') for (const pl of G.players) if (pl.dead && (pl.deadT = (pl.deadT || 0) + dt) > 6) {
+      pl.deadT = 0; pl.respawn(); G.events.emit('playerRevived', { player: pl });
+    }
     if (G.state === 'play' && !S.alive) {
       G.state = 'sinking'; G.stateT = 7;
       G.events.emit('shipSinking');
@@ -267,7 +340,21 @@ function simulate(dt) {
   } else {
     G.crew.update(dt, t);
   }
+  G.net.update(dt);
+  view(dt);
+}
 
+// A friend's headset: our hands and keys still make actions (sent to the host by net.js),
+// and the world follows the host's snapshots (net/mirror.js).
+function clientFrame(dt, playing) {
+  if (playing) { G.player.update(dt); G.player.updateView(dt); }
+  else G.player.clampToDeck();
+  G.net.update(dt);
+}
+
+// Looks and sound, every headset
+function view(dt) {
+  const t = G.t, S = G.ship;
   // Bow spray on every moving ship
   for (const s of allShips()) {
     if (!s.alive) continue;

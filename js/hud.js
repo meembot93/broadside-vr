@@ -41,7 +41,7 @@ export class Hud {
   // Your health (and, in co-op, your friends') pinned to the top left of your view
   drawVitals() {
     const G = this.G, list = [G.player, ...G.players.filter((p) => p !== G.player)].slice(0, 4);
-    const key = list.map((p) => `${p.id}:${Math.ceil(p.health)}:${p.dead}`).join('|');
+    const key = list.map((p) => `${p.id}:${p.name}:${Math.ceil(p.health)}:${p.dead}`).join('|');
     if (key === this.vitalsKey) return;
     this.vitalsKey = key;
     const g = this.vitalsTex.userData.ctx;
@@ -50,7 +50,7 @@ export class Hud {
       const y = i * 62 + 4, v = Math.max(0, Math.min(1, p.health / 100));
       g.fillStyle = 'rgba(20,12,6,0.6)'; g.beginPath(); g.roundRect(0, y, 512, 56, 14); g.fill();
       g.fillStyle = '#f6e7c1'; g.font = 'bold 30px Georgia, serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
-      g.fillText(p === G.player ? 'You' : `Mate ${i}`, 14, y + 29);
+      g.fillText(p === G.player ? 'You' : (p.name || `Mate ${i}`), 14, y + 29, 102);
       g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillRect(120, y + 12, 300, 32);
       g.fillStyle = p.dead ? '#555' : v > 0.35 ? '#c0392b' : '#ff5a2a'; g.fillRect(120, y + 12, 300 * v, 32);
       g.strokeStyle = '#c9a75b'; g.lineWidth = 3; g.strokeRect(120, y + 12, 300, 32);
@@ -136,7 +136,10 @@ export class Hud {
     g.fillStyle = 'rgba(120,80,30,0.15)'; for (let i = 0; i < 30; i++) g.fillRect(0, i * 12, w, 1);
     g.fillStyle = '#3a2210'; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
     g.font = 'bold 34px Georgia, serif'; g.fillText("Captain's Board", 20, 44);
-    g.font = '18px Georgia, serif'; g.textAlign = 'right'; g.fillText(`v${VERSION}`, w - 16, 40); g.textAlign = 'left';
+    g.font = '18px Georgia, serif'; g.textAlign = 'right'; g.fillText(`v${VERSION}`, w - 16, 40);
+    // Playing with friends: the room code, so more can join mid-voyage
+    if (G.net?.code) { g.font = 'bold 16px Georgia, serif'; g.fillText(`Room ${G.net.code} · ${G.players.length} aboard`, w - 16, 62); }
+    g.textAlign = 'left';
     g.font = '24px Georgia, serif';
     const bar = (y, label, v, col) => {
       g.fillStyle = '#3a2210'; g.fillText(label, 20, y + 20);
@@ -215,6 +218,6 @@ export class Hud {
     if (G.mode !== 'desktop') return;
     const held = G.player.deskItem ? G.player.deskItem.kind : 'empty hands';
     const V = G.voyages, vtxt = V.n ? `Voyage ${V.n} fight ${Math.max(1, V.wave)}/${V.waves.length}` : `Sunk ${G.score}`;
-    this.dom.innerHTML = `Health ${Math.round(G.player.health)} &nbsp;|&nbsp; Hull ${Math.round(G.ship.health)} &nbsp;|&nbsp; ${vtxt} &nbsp;|&nbsp; Holding: ${held}${this.damageText() ? ' &nbsp;|&nbsp; ' + this.damageText() : ''}`;
+    this.dom.innerHTML = `${G.net?.code ? `Room ${G.net.code} (${G.players.length} aboard) &nbsp;|&nbsp; ` : ''}Health ${Math.round(G.player.health)} &nbsp;|&nbsp; Hull ${Math.round(G.ship.health)} &nbsp;|&nbsp; ${vtxt} &nbsp;|&nbsp; Holding: ${held}${this.damageText() ? ' &nbsp;|&nbsp; ' + this.damageText() : ''}`;
   }
 }

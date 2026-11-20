@@ -83,19 +83,48 @@ export class Enemies {
     s.ai = { canBoard: first || boss ? true : Math.random() < Math.min(0.85, 0.55 + lv * 0.1), mode: 'approach', inRangeT: 0, boardT: 3, sent: 0, aimErr: Math.max(0.012, 0.03 - lv * 0.005) };
     s.driftRudder = rand(-0.3, 0.3);
     s.boss = boss; s.level = lv;
-    // Every job on an enemy ship needs a living sailor: no helmsman, no steering; no gunner
-    // at a cannon, no shot. Kill them all and the ship drifts.
+    this.crewUp(s, K, boss);
+    this.ships.push(s);
+    G.events.emit('enemySpawned', { ship: s, kind, boss, count: this.ships.filter((e) => e.hostile).length });
+    return s;
+  }
+
+  // Every job on an enemy ship needs a living sailor: no helmsman, no steering; no gunner
+  // at a cannon, no shot. Kill them all and the ship drifts.
+  // Faces come from a seed made from the ship's id, so every headset sees the same pirates.
+  crewUp(s, K, boss) {
+    const n = parseInt(s.id.split(':')[1]) || 0;
     K.crew.forEach(([role, side, x, z], i) => {
       const chief = boss && i === 0;
-      const p = makePerson(chief ? BOSS_LOOK : LOOKS[i % LOOKS.length]);
+      const p = makePerson({ ...(chief ? BOSS_LOOK : LOOKS[i % LOOKS.length]), seed: 1000 + n * 37 + i });
       if (chief) p.g.scale.setScalar(1.1);
       p.g.position.set(x, 0, z); s.root.add(p.g);
       s.crew.push({ id: `${s.id}/crew:${i}`, p, role, side, home: [x, z], hp: chief ? 8 : 2, maxHp: chief ? 8 : 2, boss: chief ? boss.name : null,
         cannon: null, aimT: 0, hitCD: 0, atkCD: rand(0.6, 1.2), swingHit: true, workT: 0 });
     });
+  }
+
+  // A friend's headset (multiplayer): build the ship the host told us about, as it is right now.
+  // ss: one ship from the host's snapshot (state.js). No rules run on it here; net/mirror.js
+  // moves it from the host's updates.
+  spawnMirror(ss) {
+    const G = this.G, K = KINDS[ss.kind] || KINDS.brigantine;
+    const boss = ss.boss ? { name: ss.boss } : null;
+    const s = new Ship(G.scene, { id: ss.id, kind: ss.kind, x: ss.pos[0], z: ss.pos[1], heading: ss.heading, sail: ss.sail, gunZ: K.gunZ,
+      maxSpeed: ss.maxSpeed || K.maxSpeed, turnRate: K.turnRate, health: ss.maxHealth || K.health });
+    s.health = ss.health; s.ai = { mode: ss.ai?.mode || 'approach' }; s.boss = boss; s.level = ss.level || 0;
+    this.crewUp(s, K, boss);
     this.ships.push(s);
-    G.events.emit('enemySpawned', { ship: s, kind, boss, count: this.ships.filter((e) => e.hostile).length });
     return s;
+  }
+
+  // A boarder as the host described it (multiplayer)
+  spawnBoarderMirror(bs) {
+    const p = makePerson({ ...LOOKS[bs.look || 1], seed: bs.seed });
+    p.g.position.set(...bs.pos); this.G.ship.root.add(p.g);
+    const b = { id: bs.id, p, state: bs.state, t: 0, hp: bs.hp, atkCD: 0, hitCD: 0, swingHit: true };
+    this.boarders.push(b);
+    return b;
   }
 
   // The boss captain of this ship, while still standing (null otherwise)
@@ -352,10 +381,11 @@ export class Enemies {
     _a.copy(e.root.position); P.root.worldToLocal(_a);
     const side = Math.sign(_a.x) || 1;
     const z = clamp(_a.z * 0.3 + rand(-2.5, 2.5), -6.5, 4.5);
-    const p = makePerson(LOOKS[1 + Math.floor(Math.random() * (LOOKS.length - 1))]);
+    const look = 1 + Math.floor(Math.random() * (LOOKS.length - 1)), seed = Math.floor(Math.random() * 1e9);
+    const p = makePerson({ ...LOOKS[look], seed });
     const from = new THREE.Vector3(side * 5, 2.8, z), to = new THREE.Vector3(side * (halfWidth(z) - 0.8), 0, z);
     p.g.position.copy(from); P.root.add(p.g);
-    this.boarders.push({ id: G.ids.next('boarder'), p, state: 'jump', t: 0, from, to, hp: 2, atkCD: rand(0.6, 1.2), hitCD: 0, swingHit: true });
+    this.boarders.push({ id: G.ids.next('boarder'), p, look, seed, state: 'jump', t: 0, from, to, hp: 2, atkCD: rand(0.6, 1.2), hitCD: 0, swingHit: true });
     G.events.emit('boarderSpawned', { ship: e, first: !this.warnedBoard });
     this.warnedBoard = true;
   }

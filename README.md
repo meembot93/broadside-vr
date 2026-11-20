@@ -13,6 +13,12 @@ captain at the wheel (killing him makes his crew jump overboard). Win and the sh
 and a harder voyage begins; lose the ship and the voyage starts over. For testing,
 `?voyage=2` starts on voyage 2 and `?wave=3` jumps to the boss fight.
 
+## Play with friends
+
+Up to 4 players on one ship. One presses **Host a game** on the title screen and reads out the
+4-letter room code; friends type it next to **Join**. Then everyone presses Enter VR. Free and
+peer-to-peer (WebRTC via PeerJS). Details and troubleshooting: [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md).
+
 ## Controls
 
 **Quest:** left stick walk, right stick snap turn (45°), grip = grab, trigger = fire.
@@ -40,7 +46,7 @@ Your crew only fires a cannon now and then, so the fighting is up to you.
   haptics and messages.
 - Ships, cannons, items, boarders and cannonballs have stable ids; `G.snapshot()` returns the whole
   game state as plain data.
-- See [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md) for the plan to add friends.
+- Multiplayer lives in `js/net/` (see [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md)): the host runs these rules, friends mirror its snapshots.
 
 
 ## Version number (please keep it up to date)

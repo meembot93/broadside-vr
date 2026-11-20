@@ -300,7 +300,7 @@ export class Damage {
   snapshot() {
     const r2 = (v) => Math.round(v * 100) / 100;
     return {
-      leaks: this.leaks.map((l) => ({ id: l.id, side: l.side, y: r2(l.y), z: r2(l.z), blows: l.blows })),
+      leaks: this.leaks.map((l) => ({ id: l.id, side: l.side, x: r2(l.x), y: r2(l.y), z: r2(l.z), blows: l.blows })),
       fires: this.fires.map((f) => ({ id: f.id, x: r2(f.x), z: r2(f.z), heat: r2(f.heat) })),
       masts: this.masts.map((M) => ({ id: M.id, broken: M.broken, blows: M.blows })),
       speedMul: r2(this.S.speedMul),
