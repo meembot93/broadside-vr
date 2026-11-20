@@ -63,28 +63,36 @@ export function heroBody(k, c, R) {
   k.add(hips, c.pants, 0, 0, [1, 1, 0.82]);
   k.add(lathe(TORSO), skin, 0, 0, [1, 1, D]);
   // Rounded shoulders: blend the torso into the arms
-  // Bust (covered by the top's cups)
-  const cup = (col, r) => { for (const s of [-1, 1]) k.ball(r, 1, col, [s * 0.074, 1.315, front(1.315) + 0.032], [0, s * 0.3, 0], [1, 0.9, 0.78]); };
+  // Bust: full rounded skin shapes set close together (cleavage), with the top's cups
+  // covering only the lower part and a trim along the cut edge.
+  const BY = 1.315, BX = 0.066, BR = 0.094, bz = front(BY) + 0.04, BS = [1, 0.95, 0.92];
+  const bust = (col, cut, trim) => {
+    for (const s of [-1, 1]) {
+      const at = [s * BX, BY, bz], rot = [0.12, s * 0.28, 0];
+      k.ball(BR, 1, skin, at, rot, BS);
+      k.add(new THREE.SphereGeometry(BR * 1.04, 12, 8, 0, Math.PI * 2, Math.PI * cut, Math.PI * (1 - cut)), col, at, rot, BS);
+      if (trim !== null) k.add(new THREE.TorusGeometry(BR * 1.04 * Math.sin(Math.PI * cut), 0.009, 3, 14).rotateX(Math.PI / 2).translate(0, BR * 1.04 * Math.cos(Math.PI * cut), 0), trim, at, rot, BS);
+    }
+    k.box(0.006, 0.075, 0.008, mix(skin, 0x6a3a2a, 0.35), [0, BY + 0.005, bz - BR * 0.62]);   // the shadow between them
+  };
 
   if (c.top === 'bikini') {
-    cup(c.shirt, 0.08);
+    bust(c.shirt, 0.4, FRILL);
     band(k, 1.235, 1.275, 0.012, c.shirt);                  // under-band
     band(k, 1.228, 1.24, 0.02, FRILL);                       // frill under it
-    for (const s of [-1, 1]) {                               // frilled top edge of each cup
-      const g = new THREE.TorusGeometry(0.068, 0.009, 3, 9, Math.PI);
-      k.add(g, FRILL, [s * 0.074, 1.322, front(1.315) + 0.025], [-1.05, s * 0.3, 0], [1, 1, 0.7]);
+    for (const s of [-1, 1]) {
       // halter strap from the cup up round the neck
-      k.tube([[s * 0.085, 1.37, front(1.37) - 0.012], [s * 0.07, 1.47, front(1.47) - 0.004], [s * 0.05, 1.54, -0.035], [s * 0.04, 1.565, 0.02]], 0.008, c.shirt, 4);
-      k.add(new THREE.TorusGeometry(0.012, 0.004, 3, 6), GOLD, [s * 0.088, 1.375, front(1.375) - 0.02], [0.3, 0, 0]);
+      k.tube([[s * 0.1, 1.345, bz - 0.07], [s * 0.085, 1.42, front(1.42) - 0.006], [s * 0.055, 1.52, -0.04], [s * 0.04, 1.565, 0.02]], 0.008, c.shirt, 4);
+      k.add(new THREE.TorusGeometry(0.012, 0.004, 3, 6), GOLD, [s * 0.1, 1.348, bz - 0.075], [0.3, 0, 0]);
     }
-    k.add(new THREE.TorusGeometry(0.02, 0.007, 4, 8), GOLD, [0, 1.3, front(1.3) - 0.03]);   // gold ring between the cups
+    k.add(new THREE.TorusGeometry(0.02, 0.007, 4, 8), GOLD, [0, 1.29, bz - BR * 0.75]);   // gold ring between the cups
     // Frilled bottoms: white trim along the top edge
     k.add(lathe([[0.206, 0.848], [0.2, 0.866]]), FRILL, 0, 0, [1.01, 1, 0.83]);
   } else if (c.top === 'blouse') {
-    cup(c.shirt, 0.086);
-    band(k, 1.0, 1.29, 0.012, c.corset);                     // laced corset under the bust
-    band(k, 1.26, 1.44, 0.024, c.shirt);                     // off-shoulder blouse
-    band(k, 1.425, 1.465, 0.036, vary(c.shirt, 0.05, R));   // gathered top edge
+    bust(c.shirt, 0.43, vary(c.shirt, 0.06, R));
+    band(k, 1.0, 1.27, 0.012, c.corset);                     // laced corset under the bust
+    band(k, 1.25, 1.36, 0.024, c.shirt);                     // off-shoulder blouse: neckline at the bust
+    band(k, 1.35, 1.38, 0.034, vary(c.shirt, 0.05, R));     // gathered top edge
     // Laces: criss-cross cream cord with dark eyelets down the front
     for (let i = 0; i < 4; i++) {
       const y = 1.04 + i * 0.062, z = front(y + 0.03, 0.012) - 0.005;
