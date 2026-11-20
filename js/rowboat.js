@@ -125,6 +125,7 @@ export class Rowboat {
     this.active = false; this.state = 'moored'; this.from = 'ship';
     this.x = 0; this.z = 0; this.h = 0; this.v = 0; this.w = 0; this.ferry = false;
     this.inF = 0; this.inT = 0; this.turnT = 9; this.rowT = 9; this.pushT = 0; this.castT = 0;
+    this.moorRiders = new Set(); this.boardT = 0; this.manualT = 9; this.bmSeat = 0;
     this.rx = null;
   }
 
@@ -173,6 +174,29 @@ export class Rowboat {
         f = 1.1 * dt; t = 0; this.turnT = 9; this.from = goShore ? 'ship' : 'beach';
       }
     }
+    // Someone aboard: the boatman rows for them, unless they're rowing themselves
+    if (riders && s?.lx !== undefined) {
+      const ids = this.riders().map((pl) => pl.id);
+      this.manualT = Math.abs(f) > 0.02 || Math.abs(t) > 0.01 ? 0 : this.manualT + dt;
+      if (this.state === 'moored') {
+        // Somebody new came down the ladder and sat: after a moment he casts off for the beach
+        this.boardT = ids.some((id) => !this.moorRiders.has(id)) ? this.boardT + dt : 0;
+        if (this.boardT > 1.5) {
+          this.boardT = 0; this.mooredT = 0; this.state = 'free'; this.from = 'ship'; this.castT = 0; this.v = 0.6; this.manualT = 9;
+          this.G.events.emit('boatCastOff', { pos: this.worldPos(), auto: true });
+        }
+      }
+      if (this.state === 'free' && this.manualT > 1.5) {
+        this.ferry = true;
+        const m = this.moorPose(_c), tx = this.from === 'ship' ? s.lx : m.x, tz = this.from === 'ship' ? s.lz : m.z;
+        const want = Math.atan2(-(tx - this.x), -(tz - this.z));
+        this.h += clamp(angleWrap(want - this.h), -1.2 * dt, 1.2 * dt);
+        f = 1.1 * dt; t = 0; this.turnT = 9;
+      }
+      // He sits on a bench nobody is using
+      const used = new Set(this.riders().map((pl) => this.seatOf(pl)));
+      this.bmSeat = [0, 1, 2, 3].find((i) => !used.has(i)) ?? -1;
+    } else { this.boardT = 0; this.manualT = 9; this.bmSeat = 0; }
     if (f > 0.02) this.rowT = 0; else this.rowT += dt;
     if (Math.abs(t) > 0.01) this.turnT = 0; else this.turnT += dt;
 
@@ -220,8 +244,9 @@ export class Rowboat {
     }
     // Back alongside the ship
     const m = this.moorPose(_c);
-    if (this.castT > 4 && Math.hypot(m.x - this.x, m.z - this.z) < 6.5) {
+    if (this.castT > (this.from === 'beach' ? 4 : 15) && Math.hypot(m.x - this.x, m.z - this.z) < 6.5) {
       this.state = 'moored'; this.from = 'ship'; this.v = 0; this.mooredT = 0;
+      this.moorRiders = new Set(this.riders().map((pl) => pl.id)); // they came back to climb up, not to go again
       this.G.events.emit('boatMoored', { pos: this.worldPos() });
     }
   }
@@ -253,12 +278,12 @@ export class Rowboat {
   }
 
   // ================= MULTIPLAYER =================
-  snap() { return this.active ? [r2(this.x), r2(this.z), r3(this.h), STATES.indexOf(this.state), r2(this.v), this.ferry ? 1 : 0, this.side] : null; }
+  snap() { return this.active ? [r2(this.x), r2(this.z), r3(this.h), STATES.indexOf(this.state), r2(this.v), this.ferry ? 1 : 0, this.side, this.bmSeat] : null; }
   applySnap(a) {
     if (!a) { if (this.active) this.reset(); return; }
     if (!this.active) { this.active = true; this.rx = null; }
     this.net = { x: a[0], z: a[1], h: a[2], at: performance.now() / 1000 };
-    this.state = STATES[a[3]] || 'free'; this.v = a[4]; this.ferry = !!a[5]; this.side = a[6];
+    this.state = STATES[a[3]] || 'free'; this.v = a[4]; this.ferry = !!a[5]; this.side = a[6]; this.bmSeat = a[7] ?? 0;
   }
 
   // ================= LOOKS + YOUR OWN BODY (every headset) =================
@@ -289,7 +314,8 @@ export class Rowboat {
     root.updateMatrixWorld(true);
     this.frame.pos.set(this.rx, 0, this.rz); this.frame.heading = this.rh;
     // The boatman, the oars
-    const bm = this.boatman; bm.g.visible = this.ferry; bm.pose = 'row';
+    const bm = this.boatman; bm.g.visible = this.ferry && this.bmSeat >= 0; bm.pose = 'row';
+    if (this.bmSeat >= 0) bm.g.position.z = SEAT_Z[this.bmSeat];
     if (this.ferry) animatePerson(bm, dt, false, t);
     const stroking = this.ferry || this.riders().some((pl) => pl !== G.player) && Math.abs(this.v) > 0.4 || this.stickT > 0;
     this.stickT = Math.max(0, (this.stickT || 0) - dt);
