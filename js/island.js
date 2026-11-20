@@ -585,9 +585,14 @@ export class Island {
     if (this.boat.tryBoard(P, _a.x, _a.z)) { this.boat.clampRider(P); return; } // walked into the boat
     const lg = P.lastGood || (P.lastGood = { x: _a.x, z: _a.z });
     if (!walkable(_a.x, _a.z)) {
-      P.dolly.position.x += lg.x - _a.x; P.dolly.position.z += lg.z - _a.z;
-      _a.x = lg.x; _a.z = lg.z;
-    } else { lg.x = _a.x; lg.z = _a.z; }
+      // Slide along the edge of the trail instead of sticking to it: keep whichever half of the
+      // step still lands somewhere walkable, else stay put
+      let nx = lg.x, nz = lg.z;
+      if (walkable(_a.x, lg.z)) nx = _a.x; else if (walkable(lg.x, _a.z)) nz = _a.z;
+      P.dolly.position.x += nx - _a.x; P.dolly.position.z += nz - _a.z;
+      _a.x = nx; _a.z = nz;
+    }
+    lg.x = _a.x; lg.z = _a.z;
     const gy = ground(_a.x, _a.z), oy = P.dolly.position.y;
     P.dolly.position.y = gy;
     P.headLocal.set(_a.x, _a.y - oy + gy, _a.z);

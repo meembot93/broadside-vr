@@ -78,7 +78,7 @@ function isletHeight(x, z) {
 // Off the path is thick jungle you can't walk into. Local coords: u = x - ISLE.x, v = z - ISLE.z.
 export const ISLE = { x: -40, z: -930, rx: 105, rz: 140, half: [150, 175] };
 // The path, beach to summit (local u, v), and the clearings it passes through
-const PATH_PTS = [[2, 132], [6, 112], [-6, 100], [-24, 88], [-44, 70], [-55, 46], [-46, 24], [-26, 12], [0, 6], [24, -6], [44, -24], [50, -40], [38, -56], [16, -52], [-6, -60], [-20, -74], [-12, -88], [0, -92]];
+const PATH_PTS = [[3, 150], [2, 132], [6, 112], [-6, 100], [-24, 88], [-44, 70], [-55, 46], [-46, 24], [-26, 12], [0, 6], [24, -6], [44, -24], [50, -40], [38, -56], [16, -52], [-6, -60], [-20, -74], [-12, -88], [0, -92]];
 export const CLEARINGS = [
   { id: 'camp', u: 8, v: 110, r: 13 },
   { id: 'ambush', u: -54, v: 44, r: 11 },
@@ -86,7 +86,7 @@ export const CLEARINGS = [
   { id: 'temple', u: 0, v: -96, r: 17 },
 ];
 export const ISLE_SOLIDS = []; // props you can't walk through: { x, z, r } (world)
-export const PATH_HALF = 2.6;   // you can walk this far either side of the path's middle
+export const PATH_HALF = 3.2;   // you can walk this far either side of the path's middle
 const SUMMIT = { u: 0, v: -96 };
 let PATH = null; // { pts: [{u, v, s, h}], len, grid, field }
 
@@ -209,7 +209,7 @@ export function isleWalkable(x, z, pad = 0.3) {
   if (!inField(u, v)) return false;
   const h = sampleField(isleField().hgt, u, v);
   if (h < 0.15) return false;
-  const ok = sampleField(FIELD.dp, u, v) < PATH_HALF || (h < 2.4 && v > 60) || CLEARINGS.some((c) => (u - c.u) ** 2 + (v - c.v) ** 2 < c.r * c.r);
+  const ok = sampleField(FIELD.dp, u, v) < PATH_HALF + 0.4 || (h < 3 && v > 60) || CLEARINGS.some((c) => (u - c.u) ** 2 + (v - c.v) ** 2 < c.r * c.r);
   return ok && !ISLE_SOLIDS.some((o) => (x - o.x) ** 2 + (z - o.z) ** 2 < (o.r + pad) ** 2);
 }
 
