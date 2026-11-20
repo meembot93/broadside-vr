@@ -33,6 +33,9 @@ const srange = (a, b) => a + srand() * (b - a);
 // An oval bay centred a little ahead of the start, open to the sea toward -z (where the sun is).
 export const COVE = { cx: 0, cz: -120, a: 300, b: 560 };
 export const ISLET = { x: -135, z: -330, r: 38 };
+// Rocks and palm trunks on the islet that people can't walk through (island.js): { x, z, r }
+export const ISLET_SOLIDS = [];
+const onIslet = (c) => Math.hypot(c.x - ISLET.x, c.z - ISLET.z) < ISLET.r * 1.6;
 
 // Distance inland from the shoreline (negative = water), plus how cliffy the coast is there.
 function coveShore(x, z) {
@@ -346,7 +349,7 @@ export function buildLand(scene) {
 
   const palmPick = () => (srand() < 0.12 ? sampleIslet(ISLET.r * 0.85, 0.8) : sampleLand(4, 60, 0.9, 9, 0.35));
   const palms = scatter(plantMat, palmGeometry(), 230, palmPick,
-    () => { const k = srange(0.75, 1.25); return { sx: k, sy: k * srange(0.85, 1.2), sz: k, dy: -0.3, hue: srange(0.22, 0.3), sat: 0.15, lit: srange(0.45, 0.6) }; });
+    (c) => { const k = srange(0.75, 1.25); if (onIslet(c)) ISLET_SOLIDS.push({ x: c.x, z: c.z, r: 0.35 * k }); return { sx: k, sy: k * srange(0.85, 1.2), sz: k, dy: -0.3, hue: srange(0.22, 0.3), sat: 0.15, lit: srange(0.45, 0.6) }; });
 
   // trees grow in patches of jungle, thickest near the shore
   const treePick = () => {
@@ -362,7 +365,12 @@ export function buildLand(scene) {
     return sampleLand(-10, 18, -4, 12, 5, null);
   };
   const rocks = scatter(rockMat, rockGeometry(), 260, rockPick,
-    (c) => { const k = srange(1.2, 5.5); return { sx: k * srange(0.8, 1.4), sy: k * srange(0.7, 1.3), sz: k * srange(0.8, 1.4), dy: -k * 0.25, tiltX: srange(-0.3, 0.3), tiltZ: srange(-0.3, 0.3), hue: 0.08, sat: 0.08, lit: srange(0.42, 0.58) }; });
+    (c) => {
+      const k = srange(1.2, 5.5);
+      const r = { sx: k * srange(0.8, 1.4), sy: k * srange(0.7, 1.3), sz: k * srange(0.8, 1.4), dy: -k * 0.25, tiltX: srange(-0.3, 0.3), tiltZ: srange(-0.3, 0.3), hue: 0.08, sat: 0.08, lit: srange(0.42, 0.58) };
+      if (onIslet(c) && r.sy * 0.6 + r.dy > 0.3) ISLET_SOLIDS.push({ x: c.x, z: c.z, r: Math.min(r.sx, r.sz) * 0.8 }); // only rocks you'd bump into
+      return r;
+    });
 
   scene.add(palms, trees, rocks);
   return { terrain, islet };

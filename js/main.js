@@ -90,6 +90,18 @@ for (const b of document.querySelectorAll('#weather button')) {
   });
 }
 
+// Turning with the right stick: snap (45° steps, the comfiest) or smooth. Remembered.
+const TURN_KEY = 'broadside.turn';
+try { G.player.smoothTurn = localStorage.getItem(TURN_KEY) === 'smooth'; } catch (e) { /* private mode */ }
+for (const b of document.querySelectorAll('#turning button')) {
+  b.classList.toggle('on', (b.dataset.turn === 'smooth') === !!G.player.smoothTurn);
+  b.addEventListener('click', () => {
+    G.player.smoothTurn = b.dataset.turn === 'smooth';
+    try { localStorage.setItem(TURN_KEY, b.dataset.turn); } catch (e) { /* private mode */ }
+    for (const o of document.querySelectorAll('#turning button')) o.classList.toggle('on', o === b);
+  });
+}
+
 // ---------- Ids and actions ----------
 // Find anything by its id: ships, cannons, items, players.
 G.byId = (id) => {

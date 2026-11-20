@@ -610,7 +610,8 @@ export class Player {
       const sx = ax.length >= 4 ? ax[2] : ax[0] || 0, sy = ax.length >= 4 ? ax[3] : ax[1] || 0;
       if (h.side === 'left') this.move(sx, sy, dt);
       if (h.side === 'right') {
-        if (Math.abs(sx) > 0.7 && !this.snapLatch) { this.snapLatch = true; this.snapTurn(sx > 0 ? -Math.PI / 4 : Math.PI / 4); }
+        if (this.smoothTurn) { if (Math.abs(sx) > 0.2) this.snapTurn(-Math.sign(sx) * (Math.abs(sx) - 0.2) / 0.8 * 2.2 * dt); } // up to ~125°/s
+        else if (Math.abs(sx) > 0.7 && !this.snapLatch) { this.snapLatch = true; this.snapTurn(sx > 0 ? -Math.PI / 4 : Math.PI / 4); }
         else if (Math.abs(sx) < 0.3) this.snapLatch = false;
       }
     }

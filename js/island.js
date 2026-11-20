@@ -14,7 +14,7 @@
 // Events: treasureMarked, anchorDropped, wentAshore, wentAboard, guardsAlerted, treasureGuarded,
 //   digStarted, chestUnearthed, chestOpened, upgradeChosen, treasureDone
 import * as THREE from 'three';
-import { landHeight, ISLET } from './land.js';
+import { landHeight, ISLET, ISLET_SOLIDS } from './land.js';
 import { makePerson, animatePerson, facePerson } from './people.js';
 import { ENEMY_LOOKS } from './enemies.js';
 import { Kit } from './kit.js';
@@ -35,7 +35,8 @@ const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3
 const r2 = (v) => Math.round(v * 100) / 100;
 const flat = (a, x, z) => Math.hypot(a.x - x, a.z - z);
 const ground = (x, z) => Math.max(0, landHeight(x, z));
-const walkable = (x, z) => landHeight(x, z) > 0.15 && Math.hypot(x - ISLET.x, z - ISLET.z) < ISLET.r * 1.5;
+const walkable = (x, z, pad = 0.3) => landHeight(x, z) > 0.15 && Math.hypot(x - ISLET.x, z - ISLET.z) < ISLET.r * 1.5 &&
+  !ISLET_SOLIDS.some((o) => (x - o.x) ** 2 + (z - o.z) ** 2 < (o.r + pad) ** 2); // not inside a rock or a palm
 
 const BEAM_MAT = new THREE.MeshBasicMaterial({ color: 0xffd25a, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
 const RING_MAT = new THREE.MeshBasicMaterial({ color: 0xffd25a, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide });
@@ -292,6 +293,9 @@ export class Island {
     if (d < 0.15) return true;
     const k = Math.min(d, speed * dt) / d, nx = pos.x + dx * k, nz = pos.z + dz * k;
     if (walkable(nx, nz)) { pos.x = nx; pos.z = nz; }
+    else if (walkable(nx, pos.z)) pos.x = nx;        // slide along a rock
+    else if (walkable(pos.x, nz)) pos.z = nz;
+    else { const s = Math.min(d, speed * dt), sx = pos.x - dz / d * s, sz = pos.z + dx / d * s; if (walkable(sx, sz)) { pos.x = sx; pos.z = sz; } } // step round it
     pos.y = ground(pos.x, pos.z);
     facePerson(p, dx, dz, dt);
     return false;

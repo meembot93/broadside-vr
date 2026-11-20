@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { makePerson, animatePerson } from '../people.js';
 import { buildGlove } from '../player.js';
 import { canvasTex, angleWrap, clamp } from '../util.js';
+import { landHeight } from '../land.js';
 
 // One captain's coat per seat, so you can tell your mates apart at a glance
 const LOOKS = [
@@ -108,9 +109,12 @@ export class RemotePlayer {
     // Body under the head, a little behind the eyes; shorter if they crouch or sit
     const p = this.p, g = p.g;
     g.visible = true;
-    const sc = clamp(V.head.y / 1.66, 0.62, 1.15);
+    // On a deck the floor is y = 0; ashore (island.js, the shore's space is the world) it's the ground
+    const bx = V.head.x + Math.sin(V.yaw) * 0.09, bz = V.head.z + Math.cos(V.yaw) * 0.09;
+    const floor = this.ship.isShore ? Math.max(0, landHeight(bx, bz)) : 0;
+    const sc = clamp((V.head.y - floor) / 1.66, 0.62, 1.15);
     g.scale.setScalar(sc);
-    g.position.set(V.head.x + Math.sin(V.yaw) * 0.09, 0, V.head.z + Math.cos(V.yaw) * 0.09);
+    g.position.set(bx, floor, bz);
     g.rotation.y = V.yaw;
     p.head.rotation.x = clamp(V.pitch, -0.8, 0.8) * 0.8;
     p.dead = this.dead;
