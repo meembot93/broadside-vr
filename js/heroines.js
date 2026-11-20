@@ -90,6 +90,12 @@ export function heroBody(k, c, R) {
     k.add(new THREE.TorusGeometry(0.02, 0.007, 4, 8), GOLD, [0, BY - 0.02, bz - BR * 0.72]);   // gold ring between the cups
     // Frilled bottoms: white trim along the top edge
     k.add(lathe([[0.206, 0.848], [0.2, 0.866]]), FRILL, 0, 0, [1.01, 1, 0.83]);
+  } else if (c.top === 'wrap') {     // a black cloth wrapped round the chest, knotted at the back
+    bust(c.shirt, 0.16, vary(c.shirt, 0.35, R));
+    band(k, 1.225, 1.365, 0.016, c.shirt);
+    band(k, 1.225, 1.24, 0.024, vary(c.shirt, 0.3, R));
+    k.ball(0.028, 0, c.shirt, [0, 1.3, -front(1.3) + 0.012], 0, [1.3, 0.9, 0.7]);
+    for (const s of [-1, 1]) k.box(0.035, 0.09, 0.01, c.shirt, [s * 0.025, 1.25, -front(1.25) + 0.02], [-0.2, 0, s * 0.35]);
   } else if (c.top === 'blouse') {
     bust(c.shirt, 0.43, vary(c.shirt, 0.06, R));
     band(k, 1.0, 1.27, 0.012, c.corset);                     // laced corset under the bust
@@ -108,6 +114,11 @@ export function heroBody(k, c, R) {
   // Sash: a wide, slightly loose band over the hips
   k.add(lathe([[0.2, 0.86], [0.196, 0.9], [0.182, 0.945]]), c.sash, 0, 0, [1.03, 1, 0.84]);
   k.add(lathe([[0.204, 0.885], [0.2, 0.905]]), vary(c.sash, 0.3, R), 0, 0, [1.03, 1, 0.84]);  // a fold
+  if (c.sashTie) { // knotted at her left hip with two long tails, like the reference
+    k.ball(0.042, 1, c.sash, [-0.185, 0.89, -0.06], 0, [0.8, 1, 1]);
+    k.box(0.07, 0.3, 0.014, c.sash, [-0.205, 0.73, -0.055], [0.05, 0.3, 0.12]);
+    k.box(0.06, 0.24, 0.014, vary(c.sash, 0.3, R), [-0.17, 0.75, -0.105], [-0.1, 0.5, -0.12]);
+  }
   if (c.ring) {   // big gold ring buckle, a little off-centre like the reference
     k.add(new THREE.TorusGeometry(0.04, 0.011, 4, 12), GOLD, [-0.075, 0.9, -0.17], [0, 0.35, 0]);
     k.box(0.05, 0.03, 0.012, vary(c.sash, 0.3, R), [-0.075, 0.9, -0.172], [0, 0.35, 0]);
@@ -170,7 +181,7 @@ export function heroHead(k, c, R) {
     plait(k, hair, [[x, y - 0.03, z], [x, y - 0.06, z - 0.003], [x, y - 0.085, z - 0.005]], 0.02, 0.012);   // tuft
   };
   if (c.hairStyle === 'twinbraids') { braid(1, 1.2); braid(-1, 1.2); }
-  else { braid(1, 1.1); k.add(new THREE.SphereGeometry(0.1, 8, 4, 0, Math.PI * 2, Math.PI * 0.35, Math.PI * 0.3), hair, [0, -0.05, 0.035], 0, [1.05, 1, 1.05]); }
+  else { braid(c.hairStyle === 'leftbraid' ? -1 : 1, 1.1); k.add(new THREE.SphereGeometry(0.1, 8, 4, 0, Math.PI * 2, Math.PI * 0.35, Math.PI * 0.3), hair, [0, -0.05, 0.035], 0, [1.05, 1, 1.05]); }
 
   // Bandana: a cap that sits high at the front and low at the back, knotted at the nape
   const cap = new THREE.SphereGeometry(0.136, 12, 4, 0, Math.PI * 2, 0, Math.PI * 0.5);
@@ -200,8 +211,10 @@ export function heroArm(k, c, side) {
     k.cyl(0.062, 0.064, 0.022, 8, vary(c.shirt, 0.05, Math.random), [0, -0.122, 0]);
   } else {
     k.add(new THREE.SphereGeometry(0.052, 8, 6), skin, [0, -0.03, 0], 0, [1, 1.25, 1]);
-    k.cyl(0.058, 0.057, 0.05, 8, c.armband, [0, -0.1, 0]);
-    for (const y of [-0.072, -0.128]) k.cyl(0.062, 0.062, 0.009, 8, FRILL, [0, y, 0]);
+    if (c.armband !== undefined) {
+      k.cyl(0.058, 0.057, 0.05, 8, c.armband, [0, -0.1, 0]);
+      for (const y of [-0.072, -0.128]) k.cyl(0.062, 0.062, 0.009, 8, FRILL, [0, y, 0]);
+    }
   }
   k.cyl(0.049, 0.043, 0.28, 7, skin, [0, -0.18, 0]);
   k.cyl(0.042, 0.033, 0.26, 7, skin, [0, -0.44, 0]);
@@ -220,12 +233,12 @@ export function heroLeg(k, c) {
     k.cyl(0.115, 0.113, 0.04, 9, vary(c.pants, 0.15, () => 0.9), [0, -0.135, 0], 0, [1, 1, 0.95]);   // rolled hem
   }
   // Thigh-high boot: a soft upper with a turned top, then a buckled lower boot and a heel
-  const top = c.shorts ? -0.25 : -0.22;
+  const top = c.bootTop ?? (c.shorts ? -0.25 : -0.22);
   const up = [[rT(top) + 0.011, top], ...THIGH.filter(([, y]) => y < top).map(([r, y]) => [r + 0.009, y]), [0.076, -0.47], [0.07, -0.55], [0.052, -0.66], [0.046, -0.72]];
   k.add(lathe(up, 9), B, 0, 0, [1, 1, 0.97]);
   k.cyl(rT(top) + 0.017, rT(top) + 0.015, 0.05, 9, Bl, [0, top - 0.01, 0]);
   k.cyl(0.08, 0.077, 0.02, 9, Bd, [0, -0.39, 0]);                                    // lower boot's top edge
-  for (const [y, r] of [[-0.43, 0.079], [-0.53, 0.073], [-0.67, 0.058]]) {
+  for (const [y, r] of c.bootStraps ?? [[-0.43, 0.079], [-0.53, 0.073], [-0.67, 0.058]]) {
     k.cyl(r + 0.007, r + 0.006, 0.028, 9, Bd, [0, y, 0]);
     for (const s of [-1, 1]) k.add(new THREE.TorusGeometry(0.014, 0.004, 3, 4), GOLD, [s * (r + 0.012), y, -0.008], [0, Math.PI / 2, Math.PI / 4]);
   }

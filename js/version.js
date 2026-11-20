@@ -3,5 +3,5 @@
 //
 // EVERY change merged to main must bump VERSION by 1 and replace CHANGES with a few
 // words on what that change did (newest first, keep it to 2-4 short items).
-export const VERSION = 23;
-export const CHANGES = ['much fuller busts, rounder rears', 'fuller figures for Rosa and the raider'];
+export const VERSION = 24;
+export const CHANGES = ['new pirate Scarlett', 'Goldie and Scarlett join your crew'];
