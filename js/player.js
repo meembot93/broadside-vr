@@ -108,10 +108,12 @@ export class Player {
       ship.root.add(it.obj); it.obj.position.copy(it.home.pos); it.obj.quaternion.copy(it.home.quat);
       return it;
     };
-    this.items = [mk('musket', -0.45), mk('musket', -0.05), mk('sword', 0.4),
+    this.items = [mk('musket', -0.55), mk('musket', -0.2), mk('sword', 0.12),
       // Repair tools: the hammer hangs head-up on its peg, the bucket on its hook (damage.js)
       mk('hammer', 0, { pos: new THREE.Vector3(HAMMER_HOME.x, HAMMER_HOME.y, HAMMER_HOME.z), quat: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)) }),
-      mk('bucket', 0, { pos: new THREE.Vector3(BUCKET_HOME.x, BUCKET_HOME.y, BUCKET_HOME.z), quat: new THREE.Quaternion() })];
+      mk('bucket', 0, { pos: new THREE.Vector3(BUCKET_HOME.x, BUCKET_HOME.y, BUCKET_HOME.z), quat: new THREE.Quaternion() }),
+      // Spare cutlasses, so everyone going ashore can have one (added last so the ids above don't move)
+      mk('sword', 0.36), mk('sword', 0.6)];
 
     // Sign above the rack
     const signTex = canvasTex(1024, 300, (g, w, h) => {
@@ -764,6 +766,16 @@ export class Player {
   // ashore, in the boat, on the ladder or at the top of it
   beltZone() { return !!(this.ship.isShore || this.ship.isBoat || this.climb || this.G.island?.boat.nearLadderTop(this)); }
 
+  // Going down the ladder with nothing in hand or on your belt: a cutlass from the rack goes on
+  // your belt (or a musket if the cutlasses are all taken), so nobody lands on the island unarmed
+  armForShore() {
+    if (this.items.some((it) => it.heldBy === this.id && (it.kind === 'sword' || it.kind === 'musket'))) return;
+    for (const kind of ['sword', 'musket']) {
+      const it = this.items.find((x) => x.kind === kind && !x.heldBy && !x.holder && !x.belt);
+      if (it && this.G.act({ type: 'takeItem', item: it.id })) { this.toBelt(it); const how = this.G.mode === 'vr' ? 'GRIP at your hip' : kind === 'sword' ? 'press 2' : 'press 1';
+        this.G.hud.msg(`A ${kind === 'sword' ? 'cutlass' : 'musket'} is on your belt (${how} to draw it)`, 3); return; }
+    }
+  }
   // Hang an item on your belt (ashore): still yours, back in your hand with GRIP
   toBelt(it) {
     if (it.support) { const o = it.support; it.support = null; o.supporting = null; o.held = null; }
