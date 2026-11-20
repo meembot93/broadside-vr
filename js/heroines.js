@@ -61,11 +61,13 @@ export function heroBody(k, c, R) {
     for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (y < 0.8) p.setY(i, y + (0.8 - y) * Math.min(1, Math.abs(p.getX(i)) / 0.2) * 0.75); }
   }
   k.add(hips, c.pants, 0, 0, [1, 1, 0.82]);
+  // A full, rounded rear
+  for (const s of [-1, 1]) k.ball(0.112, 1, c.pants, [s * 0.082, 0.785, 0.05], [0.25, s * -0.2, 0], [1, 1.0, 0.85]);
   k.add(lathe(TORSO), skin, 0, 0, [1, 1, D]);
   // Rounded shoulders: blend the torso into the arms
   // Bust: full rounded skin shapes set close together (cleavage), with the top's cups
   // covering only the lower part and a trim along the cut edge.
-  const BY = 1.315, BX = 0.066, BR = 0.094, bz = front(BY) + 0.04, BS = [1, 0.95, 0.92];
+  const BY = 1.3, BX = 0.078, BR = 0.128, bz = front(BY) + 0.058, BS = [1, 0.92, 0.9];
   const bust = (col, cut, trim) => {
     for (const s of [-1, 1]) {
       const at = [s * BX, BY, bz], rot = [0.12, s * 0.28, 0];
@@ -73,7 +75,7 @@ export function heroBody(k, c, R) {
       k.add(new THREE.SphereGeometry(BR * 1.04, 12, 8, 0, Math.PI * 2, Math.PI * cut, Math.PI * (1 - cut)), col, at, rot, BS);
       if (trim !== null) k.add(new THREE.TorusGeometry(BR * 1.04 * Math.sin(Math.PI * cut), 0.009, 3, 14).rotateX(Math.PI / 2).translate(0, BR * 1.04 * Math.cos(Math.PI * cut), 0), trim, at, rot, BS);
     }
-    k.box(0.006, 0.075, 0.008, mix(skin, 0x6a3a2a, 0.35), [0, BY + 0.005, bz - BR * 0.62]);   // the shadow between them
+    k.box(0.007, BR * 0.85, 0.008, mix(skin, 0x6a3a2a, 0.35), [0, BY + 0.01, bz - BR * 0.58]);   // the shadow between them
   };
 
   if (c.top === 'bikini') {
@@ -82,10 +84,10 @@ export function heroBody(k, c, R) {
     band(k, 1.228, 1.24, 0.02, FRILL);                       // frill under it
     for (const s of [-1, 1]) {
       // halter strap from the cup up round the neck
-      k.tube([[s * 0.1, 1.345, bz - 0.07], [s * 0.085, 1.42, front(1.42) - 0.006], [s * 0.055, 1.52, -0.04], [s * 0.04, 1.565, 0.02]], 0.008, c.shirt, 4);
-      k.add(new THREE.TorusGeometry(0.012, 0.004, 3, 6), GOLD, [s * 0.1, 1.348, bz - 0.075], [0.3, 0, 0]);
+      k.tube([[s * (BX + 0.035), BY + BR * 0.4, bz - BR * 0.72], [s * 0.085, 1.42, front(1.42) - 0.006], [s * 0.055, 1.52, -0.04], [s * 0.04, 1.565, 0.02]], 0.008, c.shirt, 4);
+      k.add(new THREE.TorusGeometry(0.012, 0.004, 3, 6), GOLD, [s * (BX + 0.035), BY + BR * 0.42, bz - BR * 0.78], [0.3, 0, 0]);
     }
-    k.add(new THREE.TorusGeometry(0.02, 0.007, 4, 8), GOLD, [0, 1.29, bz - BR * 0.75]);   // gold ring between the cups
+    k.add(new THREE.TorusGeometry(0.02, 0.007, 4, 8), GOLD, [0, BY - 0.02, bz - BR * 0.72]);   // gold ring between the cups
     // Frilled bottoms: white trim along the top edge
     k.add(lathe([[0.206, 0.848], [0.2, 0.866]]), FRILL, 0, 0, [1.01, 1, 0.83]);
   } else if (c.top === 'blouse') {
