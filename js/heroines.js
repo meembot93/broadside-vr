@@ -84,11 +84,12 @@ export function heroBody(k, c, R) {
       const at = [s * BX, BY, bz], rot = [0.12, s * 0.28, 0];
       if (col === null) {  // bare: a teardrop, sloping gently from the chest to a fuller, rounder bottom
         const g = new THREE.IcosahedronGeometry(BR, 2), p = g.attributes.position;
-        for (let i = 0; i < p.count; i++) {
+        const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+        for (let i = 0; i < p.count; i++) {   // one smooth curve: no crease at the middle
           const y = p.getY(i) / BR, z = p.getZ(i);
-          if (y > -0.1 && z < 0) p.setZ(i, z * (1 - 0.62 * Math.min(1, (y + 0.1) / 1.1) ** 0.8));   // upper slope
-          if (y > 0) p.setY(i, p.getY(i) * 1.12);                                                        // longer upper part
-          if (y < 0) { p.setY(i, p.getY(i) * 0.92); if (z < 0) p.setZ(i, z * 1.06); }                   // full, round bottom
+          let nz = z;
+          if (z < 0) nz = z * (1 - 0.5 * sm(-0.6, 1.0, y)) * (1 + 0.05 * sm(0.2, -1, y));
+          p.setXYZ(i, p.getX(i) * 0.86, BR * y * (1.02 + 0.1 * y), nz);
         }
         k.add(g, skin, at, rot, BS);
       } else k.ball(BR, 1, skin, at, rot, BS);
@@ -115,7 +116,7 @@ export function heroBody(k, c, R) {
     const e = new THREE.Euler(), n = new THREE.Vector3();
     for (const s of [-1, 1]) {
       n.set(0, 0, -1).applyEuler(e.set(-0.05, -s * 0.3, 0)).normalize();
-      const at = [s * BX + n.x * BR * 0.98, BY - 0.012 + n.y * BR * 0.92, bz + n.z * BR * 0.9];
+      const at = [s * BX + n.x * BR * 0.98 * (c.top === 'pasties' ? 0.86 : 1), BY - 0.012 + n.y * BR * 0.92, bz + n.z * BR * 0.9];
       for (const a of [-1, 1]) k.add(facing(new THREE.BoxGeometry(0.058, 0.017, 0.007).rotateZ(a * 0.78), at, [n.x, n.y, n.z]), c.shirt);
     }
   } else if (c.top === 'blouse') {
