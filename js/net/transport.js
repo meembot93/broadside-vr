@@ -55,7 +55,7 @@ export async function openRoom(code, onLink) {
   return new Promise((ok, fail) => {
     const peer = new window.Peer(PREFIX + code, peerOptions());
     let open = false;
-    peer.on('open', () => { open = true; ok({ close: () => peer.destroy() }); });
+    peer.on('open', () => { open = true; ok({ close: () => peer.destroy(), peer }); }); // peer: also carries voice calls (voice.js)
     peer.on('error', (e) => {
       if (!open) { peer.destroy(); fail(new Error(e.type === 'unavailable-id' ? 'taken' : e.type === 'network' || e.type === 'server-error' ? 'network' : (e.type || 'error'))); }
       else console.warn('PeerJS', e.type, e);
@@ -90,6 +90,7 @@ export async function joinRoom(code) {
       const conn = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });
       conn.on('open', () => {
         const link = makeLink((m) => conn.send(m), () => { conn.close(); peer.destroy(); });
+        link.peer = peer; // also carries voice calls (voice.js)
         conn.on('data', (m) => link.receive(m));
         conn.on('close', () => link.lost());
         conn.on('error', () => link.lost());
@@ -115,7 +116,7 @@ function openLocalRoom(code, onLink) {
     } else if (d.k === 'm') links.get(d.from)?.receive(d.m);
     else if (d.k === 'bye') links.get(d.from)?.lost();
   };
-  return Promise.resolve({ close: () => { for (const l of links.values()) l.lost(); ch.close(); } });
+  return Promise.resolve({ close: () => { for (const l of links.values()) l.lost(); ch.close(); }, peer: null }); // no voice in two-tab test mode
 }
 
 function joinLocalRoom(code) {

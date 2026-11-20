@@ -34,7 +34,7 @@ export function snapshot(G) {
     adult: !!G.adult,
     weather: G.weather ? { name: G.weather.name, night: r3(G.weather.night), storm: r3(G.weather.storm) } : null,
     ships: [G.ship, ...G.enemies.ships].map(shipState),
-    players: G.players.map((p) => ({ id: p.id, name: p.name || null, ship: p.ship.id, head: v3(p.headLocal), health: r2(p.health), dead: p.dead })),
+    players: G.players.map((p) => ({ id: p.id, name: p.name || null, peer: p.peer || null, ship: p.ship.id, head: v3(p.headLocal), health: r2(p.health), dead: p.dead })),
     grapple: {
       aim: [r3(G.grapples.aimYaw), r3(G.grapples.aimPitch)], heldBy: G.grapples.heldBy,
       hook: G.grapples.hook ? { pos: v3(G.grapples.hook.pos), vel: v3(G.grapples.hook.vel) } : null,

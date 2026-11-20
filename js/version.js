@@ -3,5 +3,5 @@
 //
 // EVERY change merged to main must bump VERSION by 1 and replace CHANGES with a few
 // words on what that change did (newest first, keep it to 2-4 short items).
-export const VERSION = 37;
-export const CHANGES = ['sit low in the longboat', 'no more yank back up the ladder', 'cutlass on your belt ashore'];
+export const VERSION = 38;
+export const CHANGES = ['voice chat with friends: B/Y or M mutes your mic', 'mute or turn down each friend'];

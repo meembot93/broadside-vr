@@ -17,6 +17,7 @@ import { clamp } from '../util.js';
 import { openRoom, joinRoom } from './transport.js';
 import { RemotePlayer, localPose } from './avatar.js';
 import { Mirror } from './mirror.js';
+import { Voice } from './voice.js';
 
 export const MAX_PLAYERS = 4;
 const SEND_EVERY = 0.05; // seconds between snapshots / poses (20 a second)
@@ -65,6 +66,7 @@ export class Net {
     this.outbox = []; this.actQ = []; this.inbox = [];
     this.sendT = 0;
     this.status = '';
+    this.voice = new Voice(G, this); // voice chat (voice.js)
   }
 
   get active() { return !!this.role; }
@@ -80,6 +82,7 @@ export class Net {
       try {
         this.room = await openRoom(code, (link) => this.onLink(link));
         this.code = code; this.role = 'host';
+        this.voice.attach(this.room.peer); G.player.peer = this.room.peer?.id || null;
         this.captureEvents();
         return code;
       } catch (e) { if (e.message !== 'taken') throw e; }
@@ -107,6 +110,7 @@ export class Net {
         let n = 1; while (this.avatars.has(`player:${n}`)) n++;
         const id = `player:${n}`;
         pl = new RemotePlayer(G, id, String(m.name || '').slice(0, 14) || `Mate ${n + 1}`);
+        pl.peer = typeof m.peer === 'string' ? m.peer : null; // for voice calls
         this.avatars.set(id, pl); this.links.set(id, link);
         G.players.push(pl);
         link.send({ t: 'welcome', id, ver: VERSION, code: this.code });
@@ -173,7 +177,7 @@ export class Net {
         } else if (m.t === 'bye') { clearTimeout(timer); link.close(); fail(new Error(m.why === 'version' ? `version:${m.ver}` : m.why)); }
       };
       link.onClose = () => { clearTimeout(timer); fail(new Error('closed')); };
-      link.send({ t: 'hello', name, ver: VERSION });
+      link.send({ t: 'hello', name, ver: VERSION, peer: link.peer?.id || null });
     });
   }
 
@@ -184,6 +188,7 @@ export class Net {
     G.player.id = id; G.player.name = name;
     G.player.respawn(); // to our own spot on deck
     this.mirror = new Mirror(G);
+    this.voice.attach(link.peer); G.player.peer = link.peer?.id || null;
     G.act = (a) => this.clientAct(a);
     link.onMessage = (m) => this.onHostMessage(m);
     link.onClose = () => this.hostLost();
@@ -292,6 +297,7 @@ export class Net {
     if (!this.role) return;
     const G = this.G;
     for (const pl of this.avatars.values()) pl.update(dt);
+    this.voice.update(dt);
     // A friend let go of an item: it floats back to the rack
     for (const it of G.items) {
       if (it.lastHeldBy && it.lastHeldBy !== G.player.id && it.heldBy !== it.lastHeldBy && !it.holder && G.player.deskItem !== it) {
@@ -314,6 +320,7 @@ export class Net {
   }
 
   leave() {
+    this.voice.stop();
     if (this.role === 'host') { for (const l of this.links.values()) { l.send({ t: 'bye', why: 'ended' }); } this.room?.close(); }
     else if (this.link) this.link.close();
   }

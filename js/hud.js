@@ -41,7 +41,8 @@ export class Hud {
   // Your health (and, in co-op, your friends') pinned to the top left of your view
   drawVitals() {
     const G = this.G, list = [G.player, ...G.players.filter((p) => p !== G.player)].slice(0, 4);
-    const key = list.map((p) => `${p.id}:${p.name}:${Math.ceil(p.health)}:${p.dead}`).join('|');
+    const V = G.net?.voice, micOff = !!(V?.on && (V.muted || !V.stream));
+    const key = micOff + list.map((p) => `${p.id}:${p.name}:${Math.ceil(p.health)}:${p.dead}:${!!p.talking}:${!!p.voiceMuted}`).join('|');
     if (key === this.vitalsKey) return;
     this.vitalsKey = key;
     const g = this.vitalsTex.userData.ctx;
@@ -50,7 +51,9 @@ export class Hud {
       const y = i * 62 + 4, v = Math.max(0, Math.min(1, p.health / 100));
       g.fillStyle = 'rgba(20,12,6,0.6)'; g.beginPath(); g.roundRect(0, y, 512, 56, 14); g.fill();
       g.fillStyle = '#f6e7c1'; g.font = 'bold 30px Georgia, serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
-      g.fillText(p === G.player ? 'You' : (p.name || `Mate ${i}`), 14, y + 29, 102);
+      // Voice chat: yellow while talking, grey if you muted them, "mic off" for yourself
+      if (p !== G.player) g.fillStyle = p.voiceMuted ? '#8a8070' : p.talking ? '#ffd25a' : '#f6e7c1';
+      g.fillText(p === G.player ? (micOff ? 'Mic off' : 'You') : (p.name || `Mate ${i}`), 14, y + 29, 102);
       g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillRect(120, y + 12, 300, 32);
       g.fillStyle = p.dead ? '#555' : v > 0.35 ? '#c0392b' : '#ff5a2a'; g.fillRect(120, y + 12, 300 * v, 32);
       g.strokeStyle = '#c9a75b'; g.lineWidth = 3; g.strokeRect(120, y + 12, 300, 32);

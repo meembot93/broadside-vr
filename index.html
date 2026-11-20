@@ -32,6 +32,10 @@
   #mp input{font:inherit;font-size:18px;padding:8px 10px;border-radius:8px;border:2px solid #c9a75b;background:#1d140c;color:#f3e6c4;width:130px}
   #mp #codeIn{width:84px;text-transform:uppercase;letter-spacing:3px;text-align:center}
   #mpNote{margin-top:6px;font-size:15px;min-height:20px;max-width:640px}
+  #voicePanel{margin-top:8px;font-size:16px;display:none;flex-direction:column;align-items:center;gap:4px}
+  #voicePanel button{font-size:15px;padding:5px 12px;margin:2px}
+  #voicePanel .row{display:flex;align-items:center;gap:8px}
+  #voicePanel input[type=range]{width:140px;accent-color:#c9a75b}
   #room{font-size:30px;color:#ffd25a;letter-spacing:4px;margin-top:6px;display:none}
   .help{display:flex;gap:40px;margin-top:26px;font-size:14px;line-height:1.55;text-align:left;opacity:.85;flex-wrap:wrap;justify-content:center}
   .help b{color:#e8c77a}
@@ -69,6 +73,7 @@
   </div>
   <div id="room"></div>
   <div id="mpNote">Up to 4 on one ship. One of you hosts; the others type the host's room code and join.</div>
+  <div id="voicePanel"></div>
   <div id="note">Checking for VR support…</div>
   <div class="help">
     <div><b>Quest controls</b><br>
@@ -80,6 +85,7 @@
       Trigger with an empty hand at a cannon's back end: light the fuse<br>
       Grip a cannon and move your hand to aim it yourself, trigger to fire<br>
       A or X: give the helmsman his next order<br>
+      B or Y: voice chat mic on / off (hand on a friend's head: mute or unmute them)<br>
       Grapple gun on the bow: grip it and move your hand to aim, trigger to fire (trigger again cuts the lines)<br>
       Lashed alongside: walk over the rail to board them; take her and light the powder keg<br>
       Walk away from the wheel and Hawkins steers for you<br>
@@ -93,7 +99,8 @@
       Space: fire every loaded cannon that has a target<br>
       G: fire the grapple where you look (again: cut the lines)<br>
       Click near a powder keg on a captured ship to light it<br>
-      T: next order for the helmsman (he steers when you leave the wheel)</div>
+      T: next order for the helmsman (he steers when you leave the wheel)<br>
+      M: voice chat mic on / off</div>
   </div>
 </div>
 <div id="crosshair"></div>

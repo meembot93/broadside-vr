@@ -246,6 +246,7 @@ const WHY = {
 };
 const mpBusy = (on) => { hostBtn.disabled = joinBtn.disabled = on; };
 async function hostGame() {
+  G.net.voice.mic(); // asks for the microphone now, while you're still on this screen
   mpBusy(true); mpNote.textContent = 'Opening a room…';
   try {
     const code = await G.net.host(myName());
@@ -258,6 +259,7 @@ async function joinGame() {
   const code = codeIn.value.trim().toUpperCase();
   if (!/^[A-Z]{4}$/.test(code)) { mpNote.textContent = 'Type the 4-letter room code from the host’s screen first.'; codeIn.focus(); return; }
   if (G.started) { mpNote.textContent = 'Reload the page to join a friend’s game.'; return; }
+  G.net.voice.mic();
   mpBusy(true); mpNote.textContent = `Looking for ship ${code}…`;
   try {
     await G.net.join(code, myName());
@@ -272,6 +274,37 @@ async function joinGame() {
     mpBusy(false);
   }
 }
+// Voice chat panel (net/voice.js): your mic, and each friend's volume and mute.
+// Shown on this screen once you host or join (in VR: take the headset out of VR to see it).
+const voicePanel = document.getElementById('voicePanel');
+let voiceKey = '';
+function drawVoicePanel(force) {
+  const V = G.net.voice;
+  if (!V.on) { voicePanel.style.display = 'none'; return; }
+  const friends = [...G.net.avatars.values()];
+  const key = [V.muted, !!V.stream, V.denied, ...friends.map((p) => `${p.id}:${p.name}:${V.calls.has(p.id)}:${V.pref(p.name).muted}`)].join('|');
+  if (key === voiceKey && !force) return;
+  voiceKey = key;
+  voicePanel.style.display = 'flex';
+  voicePanel.textContent = '';
+  const row = () => { const d = document.createElement('div'); d.className = 'row'; voicePanel.appendChild(d); return d; };
+  const r0 = row(), lab = document.createElement('span');
+  lab.textContent = V.stream ? (V.muted ? 'Voice chat: your mic is OFF' : 'Voice chat: your mic is on') : V.denied ? 'Voice chat: no microphone allowed (you can still hear friends)' : 'Voice chat: waiting for the microphone…';
+  r0.appendChild(lab);
+  if (V.stream) { const b = document.createElement('button'); b.textContent = V.muted ? 'Turn mic on' : 'Mute my mic'; b.onclick = () => V.setMuted(!V.muted); r0.appendChild(b); }
+  for (const pl of friends) {
+    const pr = V.pref(pl.name), r = row(), n = document.createElement('span');
+    n.textContent = `${pl.name}${V.calls.has(pl.id) ? '' : ' (connecting)'}`; n.style.minWidth = '110px';
+    const sl = document.createElement('input'); sl.type = 'range'; sl.min = 0; sl.max = 200; sl.value = Math.round(pr.vol * 100);
+    sl.oninput = () => V.setPref(pl.name, { vol: sl.value / 100 });
+    const m = document.createElement('button'); m.textContent = pr.muted ? 'Unmute' : 'Mute';
+    m.onclick = () => V.setPref(pl.name, { muted: !V.pref(pl.name).muted });
+    r.append(n, sl, m);
+  }
+}
+G.net.voice.onChange = () => drawVoicePanel();
+setInterval(() => drawVoicePanel(), 1000); // friends coming and going
+
 // Closing the tab: tell the others straight away instead of letting them wait for a timeout
 window.addEventListener('pagehide', () => G.net.leave());
 hostBtn.addEventListener('click', hostGame);
