@@ -125,7 +125,7 @@ export class Net {
   applyRemote(pl, a) {
     const G = this.G, st = {};
     const x = unpack(G, a, st);
-    const ref = (x.ref && (x.ref === G.ship.id ? G.ship : G.enemies.ships.find((e) => e.id === x.ref))) || pl.ship;
+    const ref = (x.ref && G.frameById(x.ref)) || pl.ship;
     ref.root.updateMatrixWorld();
     for (const k of POINTS) if (x[k]?.isVector3) ref.root.localToWorld(x[k]);
     for (const k of DIRS) if (x[k]?.isVector3) x[k].applyQuaternion(ref.root.getWorldQuaternion(_q));
@@ -148,7 +148,7 @@ export class Net {
   }
 
   // Tell one friend's headset to do something to their own player (respawn, returnHome)
-  command(id, c) { this.links.get(id)?.send({ t: 'cmd', c }); }
+  command(id, c, extra = {}) { this.links.get(id)?.send({ t: 'cmd', c, ...extra }); }
 
   sendSnapshot() {
     const G = this.G;
@@ -199,6 +199,8 @@ export class Net {
     else if (m.t === 'cmd') {
       if (m.c === 'respawn') G.player.respawn();
       else if (m.c === 'returnHome') G.player.returnHome();
+      else if (m.c === 'goAshore') G.player.goAshore(m.x, m.z, m.yaw);
+      else if (m.c === 'goAboard') G.player.goAboard();
     } else if (m.t === 'bye') this.hostLost(m.why);
   }
 
@@ -269,6 +271,7 @@ export class Net {
       case 'hammer': r = 'hit'; break;
       case 'fillBucket': { const it = G.byId(a.item); if (!it || it.full) { r = false; send = false; } else { it.full = true; hold(it); } break; }
       case 'pourBucket': { const it = G.byId(a.item); if (!it || !it.full) { r = false; send = false; } else { it.full = false; hold(it); } break; }
+      case 'openChest': case 'pickUpgrade': case 'goAshore': case 'goAboard': r = true; break; // the host decides
       case 'order': r = a.order || ORDERS[(ORDERS.indexOf(G.crew.order) + 1) % ORDERS.length]; break;
     }
     if (send) this.actQ.push(this.toShipSpace(a));

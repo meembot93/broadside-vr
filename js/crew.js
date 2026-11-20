@@ -117,6 +117,11 @@ export class Crew {
         sail = o === 'alongside' && dist < 25 ? clamp(e.speed / S.maxSpeed + 0.1, 0.3, 1) : 0.7;
       }
       S.holdHeading = S.heading;
+    } else if (o !== 'heave' && G.island?.seaTarget()) {
+      // A treasure hunt: make for the island with the gold light (she anchors when close)
+      const tg = G.island.seaTarget(), dx = tg.x - S.pos.x, dz = tg.z - S.pos.z;
+      desired = Math.atan2(-dx, -dz); sail = Math.hypot(dx, dz) > 200 ? 1 : 0.6;
+      S.holdHeading = S.heading;
     }
     desired = G.world.avoidLand(S.pos.x, S.pos.z, desired);
     const rudder = clamp(angleWrap(S.heading - desired) * 1.6, -1, 1);
@@ -134,7 +139,8 @@ export class Crew {
       const p = m.p;
       m.atkCD -= dt; m.fireCD -= dt; p.pose = null;
       let still;
-      if (m.away || this.joinsBoarding(m)) still = this.boarding(m, dt);
+      if (m.ashore) still = G.island.crewStep(m, dt); // the landing party (island.js)
+      else if (m.away || this.joinsBoarding(m)) still = this.boarding(m, dt);
       else if (fighters.length && this.defends(m)) still = this.defend(m, fighters, dt);
       else { p.sword.visible = false; still = this[m.role](m, dt, t); }
       animatePerson(p, dt, !still, t);

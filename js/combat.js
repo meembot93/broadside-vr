@@ -90,7 +90,7 @@ export class Combat {
         if (s === b.owner || !s.alive) continue;
         if ((s.pos.x - p.x) ** 2 + (s.pos.z - p.z) ** 2 > 225) continue;
         if (s.containsWorld(p)) {
-          const dmg = b.owner.isPlayer ? 14 : b.owner.ballDamage;
+          const dmg = b.owner.isPlayer ? 14 * (G.island?.damageMul ?? 1) : b.owner.ballDamage; // bronze cannons hit harder (island.js)
           s.damage(dmg);
           if (s === G.ship) G.damage.onHit(p); // leaks, fires, a snapped mast (damage.js)
           // Splinters: sailors close to where it hit may go down (not behind the helm shelter)
@@ -130,6 +130,7 @@ export class Combat {
     };
     for (const b of G.enemies.boarders) if (b.state !== 'dead') testPerson(b.p, G.ship.root, { kind: 'boarder', b });
     for (const s of G.enemies.ships) for (const m of s.crew) if (!m.p.dead) testPerson(m.p, s.root, { kind: 'enemyCrew', m, s }, inShelter(m.p.g.position));
+    if (G.island) for (const f of G.island.foes) if (f.state !== 'dead') testPerson(f.p, G.island.shore.root, { kind: 'foe', f }); // island guards
     // Cover on deck (helm shelter, stern cabin) stops the ball
     for (const s of G.enemies.ships) {
       if (!s.alive || s.pos.distanceTo(origin) > MAX + 20) continue;
@@ -151,6 +152,7 @@ export class Combat {
     if (hit) {
       if (hit.kind === 'boarder') G.enemies.killBoarder(hit.b);
       else if (hit.kind === 'enemyCrew') G.enemies.killCrew(hit.s, hit.m, 'musket');
+      else if (hit.kind === 'foe') G.island.hitFoe(hit.f, 2, dir.x, dir.z);
       else if (hit.kind === 'hull' && !hit.cover) hit.s.damage(3);
       G.events.emit('musketHit', { kind: hit.kind, pos: _f });
       if (hit.kind === 'hull' && !hit.s.alive) this.enemySunk(hit.s);
@@ -164,6 +166,7 @@ export class Combat {
   swordCheck(player, hilt, tip, speed) {
     const G = this.G; let any = false;
     if (speed < 2.2) return false;
+    if (player.ship.isShore) return G.island.swordCheck(player, hilt, tip, speed); // ashore: island guards
     if (player.ship !== G.ship) {
       // Fighting on an enemy deck: their crew
       const e = player.ship;
@@ -202,6 +205,7 @@ export class Combat {
   deskSwordHit(player, facing) {
     const G = this.G, h = player.headLocal;
     _a.copy(facing);
+    if (player.ship.isShore) { G.island.deskSlash(player, _a); return; }
     if (player.ship !== G.ship) {
       const e = player.ship;
       for (const m of e.crew) {

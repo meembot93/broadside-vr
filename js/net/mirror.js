@@ -23,7 +23,7 @@ export class Mirror {
 
   me() { return this.G.player.id; }
   allShips() { return [this.G.ship, ...this.G.enemies.ships]; }
-  shipById(id) { return this.allShips().find((s) => s.id === id) || null; }
+  shipById(id) { return this.G.frameById(id); } // a ship, or 'shore' (island.js)
 
   // ---------- A snapshot arrived ----------
   apply(snap) {
@@ -40,6 +40,7 @@ export class Mirror {
     this.items(snap);
     this.damage(snap.damage);
     this.grapple(snap.grapple);
+    this.G.island.applySnap(snap.island, this);
 
     G.state = snap.state; G.score = snap.score; G.crew.order = snap.order;
     const V = G.voyages, sv = snap.voyage;
@@ -170,13 +171,14 @@ export class Mirror {
     const G = this.G, P = G.player, me = this.me();
     for (const si of snap.items) {
       const it = G.items.find((x) => x.id === si.id); if (!it) continue;
-      const mineHere = !!it.holder || P.deskItem === it;
+      const mineHere = !!it.holder || P.deskItem === it || it.belt;
       if (it._hold > G.t) continue; // we just did something with it; wait for the host to catch up
       it.loaded = si.loaded; it.full = si.full;
       if (mineHere && si.heldBy !== me) {
         // Someone else got it first: let go
         if (P.deskItem === it) P.equip(null);
         for (const h of P.hands) if (h.held === it) P.release(h);
+        it.belt = false;
       }
       it.heldBy = si.heldBy;
     }
@@ -270,6 +272,7 @@ export class Mirror {
     }
     for (const m of G.crew.members) this.stepPerson(m.p, dt, t);
     for (const b of G.enemies.boarders) this.stepPerson(b.p, dt, t);
+    G.island.clientStep(dt, this);
     // Cannonballs and the hook fly on their own
     for (const b of this.G.combat.active) {
       b.life += dt; b.vel.y -= 9.81 * dt; b.pos.addScaledVector(b.vel, dt); b.mesh.position.copy(b.pos);

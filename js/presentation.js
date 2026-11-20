@@ -43,6 +43,7 @@ export function wirePresentation(G) {
   });
   on('musketHit', ({ kind, pos }) => {
     if (kind === 'boarder') { audio.thud(pos); hud.msg('Got him!', 1.2); }
+    else if (kind === 'foe') { audio.thud(pos); hud.msg('Got him!', 1.2); }
     else if (kind === 'enemyCrew') { audio.thud(pos); hud.msg('Sharpshooter! One of theirs is down', 1.8); }
     else if (kind === 'hull') { fx.debris(pos, 8); audio.woodHit(pos); }
     else if (kind === 'water') fx.splash(pos, 0.3);
@@ -117,7 +118,7 @@ export function wirePresentation(G) {
   on('voyageWon', ({ voyage, name }) => {
     hud.msg('VOYAGE WON!', 5);
     hud.msg(`${name} is done. Huzzah!`, 4);
-    hud.msg(`Voyage ${voyage + 1} sails soon, and they’ll be tougher`, 4.5);
+    hud.msg('Look for a gold light: there’s treasure on the island!', 4.5);
     G.crew.cheer(); audio.cheer(); audio.bell(); setTimeout(() => audio.bell(), 500); setTimeout(() => audio.bell(), 1000);
     // Rockets over our ship, and the crew keeps cheering
     const colours = [0xffd060, 0xff5040, 0x60c0ff, 0xffffff, 0x80ff80];
@@ -128,6 +129,53 @@ export function wirePresentation(G) {
     }, 600 + i * 650);
   });
   on('shipRefitted', () => hud.msg('Ship refitted: hull patched, crew rested', 3.5));
+
+  // ---- Treasure hunts (island.js) ----
+  on('treasureMarked', () => {
+    hud.msg('Treasure! Sail for the gold light', 4.5);
+    hud.msg('Walk away from the wheel and Hawkins takes us there', 4.5);
+  });
+  on('anchorDropped', ({ pos }) => {
+    audio.splash(pos, 0.8); audio.bell();
+    hud.msg('Let go the anchor!', 3);
+    hud.msg('Stand in the gold ring by the rail to row ashore', 4.5);
+    hud.msg('Take a weapon from the rack first!', 3.5);
+  });
+  on('wentAshore', ({ player, first, pos }) => {
+    if (isMe(player)) {
+      audio.splash(pos, 0.4);
+      hud.msg('Ashore! Mags and Rosa are with you', 3.5);
+      hud.msg(desk() ? 'Your map is top right: find the X' : 'Your map is on your left wrist: find the X', 4.5);
+      if (!desk()) hud.msg('Let go of a weapon and it hangs on your belt', 4);
+    } else hud.msg(`${player.name || 'A mate'} rowed ashore`, 2.5);
+  });
+  on('wentAboard', ({ player }) => { if (isMe(player)) hud.msg('Back aboard', 2); else hud.msg(`${player.name || 'A mate'} is back aboard`, 2); });
+  const meAshore = () => G.island?.ashore(me);
+  on('guardsAlerted', ({ pos, first, big }) => {
+    audio.cheer(); audio.swoosh(pos);
+    if (first && meAshore()) hud.msg(big ? 'The treasure’s guards! Cut them down!' : 'Guards! Fight your way through!', 3);
+  });
+  on('guardKilled', ({ left, big }) => { if (!meAshore()) return; if (big) hud.msg('Their brute is down!', 2.5); else if (!left) hud.msg('That’s the last of them!', 2.5); });
+  on('treasureGuarded', () => meAshore() && hud.msg('Guards still watch the X. Clear them first!', 3));
+  on('digStarted', ({ pos }) => { hud.msg('Dig, lads, dig!', 3); audio.thud(pos); });
+  on('chestUnearthed', ({ pos }) => {
+    fx.debris(pos, 14); audio.woodHit(pos); G.crew.cheer(); audio.cheer();
+    hud.msg('A chest!', 2.5);
+    if (meAshore()) hud.msg(desk() ? 'Look at it and click to open it' : 'GRIP the lid to open it', 3.5);
+  });
+  on('chestOpened', ({ pos }) => {
+    for (let i = 0; i < 4; i++) setTimeout(() => fx.firework(pos.clone().add(new THREE.Vector3(0, 1.2 + i * 0.3, 0)), 0xffd060, 18), i * 250);
+    audio.bell(); audio.cheer();
+    hud.msg('Pick ONE prize for the ship', 3.5);
+    if (meAshore()) hud.msg(desk() ? 'Look at a card and click' : 'Reach out and GRIP a card', 3.5);
+  });
+  on('upgradeChosen', ({ name, level, player }) => {
+    G.crew.cheer(); audio.cheer(); audio.bell();
+    hud.msg(`${name}${level > 1 ? ` (x${level})` : ''}!`, 3.5);
+    if (!isMe(player) && player) hud.msg(`${player.name || 'A mate'} chose it`, 2.5);
+    hud.msg('Row back to the ship: the ring by the boat', 4.5);
+  });
+  on('treasureDone', () => { hud.msg('Weigh anchor!', 2.5); hud.msg('On to the next voyage, and they’ll be tougher', 4); audio.bell(); });
 
   // ---- Grapples and boarding ----
   on('grappleFired', ({ pos }) => { fx.flash(pos, 0.8); fx.smoke(pos, G.grapples.gunDir(_a), 4, 0.3); audio.musket(pos); audio.swoosh(pos); });

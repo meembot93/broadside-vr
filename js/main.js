@@ -20,6 +20,7 @@ import { wireVoices } from './voicelines.js';
 import { snapshot } from './state.js';
 import { Weather, CONDITIONS } from './weather.js';
 import { Net } from './net/net.js';
+import { Island } from './island.js';
 import { VERSION as VERSION_NOW } from './version.js';
 
 const params = new URLSearchParams(location.search);
@@ -61,6 +62,7 @@ G.crew = new Crew(G);
 G.grapples = new Grapples(G);
 G.damage = new Damage(G);         // leaks, fires and snapped masts you fix by hand
 G.hud = new Hud(G);
+G.island = new Island(G);        // treasure hunts between voyages
 G.player.setupVR(renderer);
 G.net = new Net(G);
 
@@ -98,8 +100,10 @@ G.byId = (id) => {
   if (id.startsWith('crew:')) return G.crew.members.find((m) => m.id === id) || null;
   const crew = /^(ship:\d+)\/(crew|keg)/.exec(id);
   if (crew) { const s = [G.ship, ...G.enemies.ships].find((x) => x.id === crew[1]); return s ? (crew[2] === 'keg' ? s.keg : s.crew.find((m) => m.id === id)) || null : null; }
-  return G.items.find((x) => x.id === id) || G.playerById(id) || G.enemies.boarders.find((b) => b.id === id) || G.damage.byId(id) || null;
+  return G.items.find((x) => x.id === id) || G.playerById(id) || G.enemies.boarders.find((b) => b.id === id) || G.damage.byId(id) || G.island.byId(id) || null;
 };
+// The deck (or beach) someone stands on, by id: our ship, an enemy ship, or 'shore' (island.js)
+G.frameById = (id) => (id === 'shore' ? G.island.shore : [G.ship, ...G.enemies.ships].find((s) => s.id === id) || null);
 G.playerById = (id) => G.players.find((p) => p.id === id) || null;
 // Everything a player does goes through here (see actions.js).
 G.act = (a) => applyAction(G, { player: G.player.id, ...a });
@@ -312,6 +316,7 @@ function simulate(dt) {
   if (playing && G.started) {
     G.grapples.update(dt);
     G.voyages.update(dt);
+    G.island.update(dt, t);
     G.enemies.update(dt, t);
     G.grapples.checkPrize();
     aimPlayerCannons();
@@ -365,6 +370,7 @@ function view(dt) {
 
   G.grapples.view(dt);
   G.damage.view(dt);
+  G.island.view(dt);
   camera.getWorldPosition(_a);
   G.weather.update(dt, t, _a);
   G.world.update(t, S.pos, _a);

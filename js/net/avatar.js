@@ -71,13 +71,23 @@ export class RemotePlayer {
     this.G.net?.command(this.id, 'returnHome');
   }
 
+  // Treasure hunts (island.js): row ashore onto the beach, or back aboard
+  goAshore(x, z, yaw) {
+    this.ship = this.G.island.shore; this.headLocal.set(x, 1.7, z); this.holdShipT = this.G.t + 1.5;
+    this.G.net?.command(this.id, 'goAshore', { x, z, yaw });
+  }
+  goAboard() {
+    this.ship = this.G.ship; this.headLocal.set(0.7, 1.7, 2.6); this.holdShipT = this.G.t + 1.5;
+    this.G.net?.command(this.id, 'goAboard');
+  }
+
   // A pose from their headset: { ship, h: head, l / r: hands (or 0), it: [[itemId, pose]], dk }
   // Each pose is [x, y, z, qx, qy, qz, qw] in the local space of `ship`.
   setPose(pk) {
     const G = this.G;
     this.pose = pk;
     if (G.t > this.holdShipT) {
-      const s = pk.ship === G.ship.id ? G.ship : G.enemies.ships.find((e) => e.id === pk.ship);
+      const s = G.frameById(pk.ship);
       if (s) this.ship = s;
     }
     if (pk.ship === this.ship.id && pk.h) this.headLocal.set(pk.h[0], pk.h[1], pk.h[2]);
@@ -154,6 +164,6 @@ export function localPose(G) {
   };
   const out = { ship: P.ship.id, h: pose(G.camera), l: 0, r: 0, it: [], dk: G.mode === 'desktop' };
   if (G.mode === 'vr') for (const h of P.hands) if (h.src && h.gp) { if (h.side === 'left') out.l = pose(h.grip); else out.r = pose(h.grip); }
-  for (const it of G.items) if (it.heldBy === P.id && (it.holder || P.deskItem === it)) out.it.push([it.id, ...pose(it.obj)]);
+  for (const it of G.items) if (it.heldBy === P.id && (it.holder || P.deskItem === it || it.belt)) out.it.push([it.id, ...pose(it.obj)]);
   return out;
 }

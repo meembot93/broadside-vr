@@ -13,6 +13,16 @@ captain at the wheel (killing him makes his crew jump overboard). Win and the sh
 and a harder voyage begins; lose the ship and the voyage starts over. For testing,
 `?voyage=2` starts on voyage 2 and `?wave=3` jumps to the boss fight.
 
+After each voyage won there's a **treasure hunt** (`js/island.js`): a gold light marks treasure
+on the islet. Sail close (or walk away from the wheel and Hawkins sails there) and the ship drops
+anchor. Stand in the gold ring by the starboard rail to row ashore with Mags and Rosa; your map
+is on your left wrist (top right on desktop), and weapons you let go of hang on your belt. Fight
+past the guards to the X, the crew digs up a chest, open it and take one prize: bronze cannons
+(+35% damage), drilled gun crews (25% faster reload) or an iron-banded hull (+50 hull). Prizes
+stack and last the whole run. Row back aboard (ring by the boat) and the next voyage begins.
+Works with friends: anyone can go ashore, whoever grabs a card first picks for the crew.
+`?treasure` starts straight on a treasure hunt.
+
 ## Play with friends
 
 Up to 4 players on one ship. One presses **Host a game** on the title screen and reads out the

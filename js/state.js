@@ -42,8 +42,9 @@ export function snapshot(G) {
     items: G.items.map((it) => ({ id: it.id, kind: it.kind, heldBy: it.heldBy, loaded: it.loaded, full: it.full })),
     damage: G.damage.snapshot(),
     order: G.crew.order,
-    crew: G.crew.members.map((m) => ({ ...person(m), on: m.away ? m.away.ship.id : G.ship.id, away: m.away?.state ?? null, sword: m.p.sword.visible })),
+    crew: G.crew.members.map((m) => ({ ...person(m), on: m.ashore ? 'shore' : m.away ? m.away.ship.id : G.ship.id, away: m.away?.state ?? null, sword: m.p.sword.visible })),
     boarders: G.enemies.boarders.map((b) => ({ id: b.id, state: b.state, hp: b.hp, pos: v3(b.p.g.position), rot: r2(b.p.g.rotation.y), attack: r2(b.p.attack), look: b.look, seed: b.seed })),
+    island: G.island ? G.island.snap() : null, // treasure hunt: site, chest, guards, upgrades (island.js)
     balls: G.combat.active.map((b) => ({ id: b.id, owner: b.owner.id, pos: v3(b.pos), vel: v3(b.vel) })),
   };
 }

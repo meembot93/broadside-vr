@@ -569,8 +569,9 @@ export class Ship {
 
   step(dt) {
     if (this.alive) {
-      this.speed = damp(this.speed, this.sail * this.maxSpeed * this.speedMul, 0.35, dt);
-      this.heading -= this.rudder * this.turnRate * (0.3 + 0.7 * (this.speed / this.maxSpeed)) * dt;
+      // At anchor (island.js): she stops and holds her heading whatever the wheel says
+      this.speed = damp(this.speed, this.anchored ? 0 : this.sail * this.maxSpeed * this.speedMul, this.anchored ? 0.7 : 0.35, dt);
+      if (!this.anchored) this.heading -= this.rudder * this.turnRate * (0.3 + 0.7 * (this.speed / this.maxSpeed)) * dt;
     } else {
       this.sinkT += dt;
       this.speed = damp(this.speed, 0, 0.6, dt);

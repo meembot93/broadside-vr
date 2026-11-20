@@ -41,6 +41,7 @@ export class Voyages {
     const q = new URLSearchParams(location.search);
     this.startN = Math.max(1, parseInt(q.get('voyage')) || 1);
     this.firstWave = Math.max(1, parseInt(q.get('wave')) || 1);
+    this.startTreasure = q.has('treasure');
     G.events.on('bossCaptainKilled', ({ ship, cause }) => { if (ship === this.bossShip) this.bossKillCause = cause; });
   }
 
@@ -57,7 +58,8 @@ export class Voyages {
     this.calm(this.G.debug ? 3 : 12);
   }
 
-  restart() { this.begin(this.n || this.startN, 1); }
+  // (a treasure hunt in progress carries on: there's nothing to restart)
+  restart() { if (this.phase !== 'treasure') this.begin(this.n || this.startN, 1); }
 
   calm(secs) { this.phase = 'calm'; this.t = secs; }
 
@@ -82,7 +84,11 @@ export class Voyages {
   update(dt) {
     const G = this.G;
     if (!G.ship.alive) return;
-    if (this.phase === 'idle') { this.begin(this.startN, this.firstWave); return; }
+    if (this.phase === 'idle') {
+      // ?treasure: skip straight to a treasure hunt (testing)
+      if (this.startTreasure) { this.n = this.startN; this.waves = plan(this.n); this.bossName = CAPTAINS[(this.n - 1) % CAPTAINS.length]; this.phase = 'treasure'; G.island.start(this.n); return; }
+      this.begin(this.startN, this.firstWave); return;
+    }
     if (this.phase === 'calm') {
       this.t -= dt;
       if (this.t <= 0) this.startWave();
@@ -127,7 +133,9 @@ export class Voyages {
     this.wonT -= dt;
     if (this.wonT > 0) return;
     this.refit();
-    this.begin(this.n + 1, 1);
+    // Treasure hunt on the islet (island.js); it starts the next voyage when everyone's back aboard
+    this.phase = 'treasure';
+    this.G.island.start(this.n);
   }
 
   // Patch the hull, heal everyone, and send the leftover hulks to the bottom.

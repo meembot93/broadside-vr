@@ -137,6 +137,10 @@ export function applyAction(G, a) {
       G.crew.setOrder(o);
       return o;
     }
+    // ---- Treasure hunts (see island.js) ----
+    // Row ashore / back aboard (standing in a gold ring), open the chest, take a prize.
+    case 'goAshore': case 'goAboard': case 'openChest': case 'pickUpgrade':
+      return G.island.act(player, a);
     // Desktop sword swing. facing: look direction in ship-local space, flat and normalized.
     case 'deskSlash':
       G.combat.deskSwordHit(player, a.facing);
