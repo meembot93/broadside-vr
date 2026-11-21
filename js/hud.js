@@ -168,12 +168,17 @@ export class Hud {
     if (dmg) { g.font = 'bold 18px Georgia, serif'; g.fillStyle = '#a02a1a'; g.fillText(dmg, 20, 229); g.font = '24px Georgia, serif'; }
     g.fillStyle = '#3a2210';
     const V = G.voyages;
-    g.fillText(V.phase === 'treasure' ? `Voyage ${V.n} won: treasure hunt!` : V.n ? `Voyage ${V.n}, fight ${Math.max(1, V.wave)} of ${V.waves.length}` : `Ships sunk: ${G.score}`, 20, 250);
+    g.fillText(V.phase === 'treasure' ? `Voyage ${V.n} won: treasure hunt!` : V.phase === 'kraken' ? `Voyage ${V.n}: the final fight!` : V.n ? `Voyage ${V.n}, fight ${Math.max(1, V.wave)} of ${V.waves.length}` : `Ships sunk: ${G.score}`, 20, 250);
     g.textAlign = 'right'; g.fillText(`${(S.speed * 1.94).toFixed(1)} kn`, w - 20, 250); g.textAlign = 'left';
     // Nearest enemy
     let best = null, bd = 1e9;
     for (const e of G.enemies.ships) if (e.alive) { const d = e.pos.distanceTo(S.pos); if (d < bd) { bd = d; best = e; } }
-    if (best) {
+    const K = G.kraken;
+    if (K && K.active && K.phase !== 'stir') {
+      g.fillStyle = '#5a1a6a'; g.fillText(K.phase === 'dying' ? 'The Kraken is slain!' : 'THE KRAKEN has the ship!', 20, 296, w - 40);
+      g.font = '20px Georgia, serif'; g.fillStyle = '#3a2210';
+      g.fillText(`(its strength ${Math.round((K.hp / K.max) * 100)}%: cannons on its head, cutlass on the arms)`, 20, 322, w - 40);
+    } else if (best) {
       _a.copy(best.pos).sub(S.pos);
       const rel = Math.atan2(_a.x, _a.z) - Math.atan2(-Math.sin(S.heading), -Math.cos(S.heading));
       const r = ((rel % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI; // -pi..pi, positive = to port

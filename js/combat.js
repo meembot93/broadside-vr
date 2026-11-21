@@ -86,7 +86,9 @@ export class Combat {
       b.life += dt; b.vel.y -= 9.81 * dt;
       const p = b.pos; p.addScaledVector(b.vel, dt); b.mesh.position.copy(p);
       let done = false;
-      for (const s of this.allShips()) {
+      // The Kraken (kraken.js): our balls can hit its head or a tentacle
+      if (b.owner === G.ship && G.kraken.ballHit(p)) done = true;
+      if (!done) for (const s of this.allShips()) {
         if (s === b.owner || !s.alive) continue;
         if ((s.pos.x - p.x) ** 2 + (s.pos.z - p.z) ** 2 > 225) continue;
         if (s.containsWorld(p)) {
@@ -146,6 +148,9 @@ export class Combat {
         if (s.containsWorld(_a, 0)) { bestT = t; hit = { kind: 'hull', s }; break; }
       }
     }
+    // The Kraken's head and tentacles
+    const kr = G.kraken.rayHit(origin, dir, MAX);
+    if (kr && kr.t < bestT) { bestT = kr.t; hit = { kind: 'kraken', kr }; }
     // Water
     if (dir.y < -0.01) { const t = -origin.y / dir.y; if (t > 0 && t < bestT) { bestT = t; hit = { kind: 'water' }; } }
     _f.copy(origin).addScaledVector(dir, bestT);
@@ -154,6 +159,7 @@ export class Combat {
       else if (hit.kind === 'enemyCrew') G.enemies.killCrew(hit.s, hit.m, 'musket');
       else if (hit.kind === 'foe') G.island.hitFoe(hit.f, 2, dir.x, dir.z);
       else if (hit.kind === 'hull' && !hit.cover) hit.s.damage(3);
+      else if (hit.kind === 'kraken') G.kraken.applyRay(hit.kr, _f);
       G.events.emit('musketHit', { kind: hit.kind, pos: _f });
       if (hit.kind === 'hull' && !hit.s.alive) this.enemySunk(hit.s);
     }
@@ -184,6 +190,7 @@ export class Combat {
       }
       return any;
     }
+    if (G.kraken.swordCheck(hilt, tip, speed)) any = true; // tentacles over our deck
     for (const b of G.enemies.boarders) {
       if (b.state === 'dead' || b.hitCD > 0) continue;
       const p = b.p.g.position;
@@ -219,6 +226,7 @@ export class Combat {
       }
       return;
     }
+    G.kraken.deskSlash(h, _a);
     for (const b of G.enemies.boarders) {
       if (b.state === 'dead') continue;
       const p = b.p.g.position; const dx = p.x - h.x, dz = p.z - h.z, d = Math.hypot(dx, dz);

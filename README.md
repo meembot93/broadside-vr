@@ -9,9 +9,14 @@ Add `?debug` to the address to make enemies spawn quickly and close by.
 
 The game is played in **voyages** (`js/voyages.js`): a few fights against sloops and
 brigantines, then a boss galleon under a named captain. Sink her, or board her and duel the
-captain at the wheel (killing him makes his crew jump overboard). Win and the ship is refitted
+captain at the wheel (killing him makes his crew jump overboard). Then the **Kraken** rises
+(`js/kraken.js`) as the final fight: it grabs the ship so she can't sail off, its tentacles grab
+the rail, slam down on the deck (a dark shadow shows where: move!) and lash at you. Shoot its
+head with the cannons (it dives and comes up on the other side each time it loses a third of
+its strength), cut or shoot the tentacles (they grow back). Win and the ship is refitted
 and a harder voyage begins; lose the ship and the voyage starts over. For testing,
-`?voyage=2` starts on voyage 2 and `?wave=3` jumps to the boss fight.
+`?voyage=2` starts on voyage 2, `?wave=3` jumps to the boss fight and `?kraken` (try
+`?debug&kraken`) straight to the Kraken.
 
 After each voyage won there's a **treasure hunt** (`js/island.js`): a gold light marks treasure
 on Treasure Island, a big jungle island (terrain and trail in `js/land.js`, jungle and ruins in

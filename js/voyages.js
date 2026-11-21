@@ -1,6 +1,7 @@
 // Voyages: the game comes in short runs of fights instead of endless spawning.
 // A voyage is a few waves of enemy ships; the last wave brings a boss, a galleon under a
-// named captain you can duel at the wheel. Beat the boss and the voyage is won: the ship is
+// named captain you can duel at the wheel. Beat the boss and the Kraken rises from the deep
+// (kraken.js): the voyage's final fight. Slay it and the voyage is won: the ship is
 // refitted and the next, harder voyage begins. Lose the ship and the voyage starts over.
 //
 // Rules only (the host runs this). Everything it does is announced as an event, so sounds,
@@ -10,6 +11,7 @@
 //   bossArrived   { voyage, ship, name }           the boss galleon is in sight
 //   waveCleared   { voyage, wave, waves, next }    every ship of the wave sunk, taken or abandoned
 //   bossDefeated  { voyage, ship, name, how }      how: 'duel' (cut down) | 'shot' | 'taken' | 'sunk' | 'crew'
+//   (then the Kraken rises: kraken.js has its own events, ending with krakenSlain)
 //   voyageWon     { voyage, name, next }           the victory moment; next voyage follows
 //   shipRefitted  { }                              hull and crew patched up between voyages
 import { rand } from './util.js';
@@ -42,6 +44,7 @@ export class Voyages {
     this.startN = Math.max(1, parseInt(q.get('voyage')) || 1);
     this.firstWave = Math.max(1, parseInt(q.get('wave')) || 1);
     this.startTreasure = q.has('treasure');
+    this.startKraken = q.has('kraken'); // ?kraken: straight to the Kraken fight (testing)
     G.events.on('bossCaptainKilled', ({ ship, cause }) => { if (ship === this.bossShip) this.bossKillCause = cause; });
   }
 
@@ -87,8 +90,11 @@ export class Voyages {
     if (this.phase === 'idle') {
       // ?treasure: skip straight to a treasure hunt (testing)
       if (this.startTreasure) { this.n = this.startN; this.waves = plan(this.n); this.bossName = CAPTAINS[(this.n - 1) % CAPTAINS.length]; this.phase = 'treasure'; G.island.start(this.n); return; }
-      this.begin(this.startN, this.firstWave); return;
+      this.begin(this.startN, this.firstWave);
+      if (this.startKraken) { this.wave = this.waves.length; this.phase = 'kraken'; this.krakenT = 2; this.krakenUp = false; }
+      return;
     }
+    if (this.phase === 'kraken') { this.updateKraken(dt); return; }
     if (this.phase === 'calm') {
       this.t -= dt;
       if (this.t <= 0) this.startWave();
@@ -121,9 +127,21 @@ export class Voyages {
       this.calm(G.debug ? 4 : 14);
       return;
     }
-    // Voyage won!
-    this.phase = 'won';
+    // The boss is beaten... but something stirs in the deep
     G.events.emit('waveCleared', { voyage: this.n, wave: this.wave, waves: this.waves.length, next: null, nextIsBoss: false });
+    this.phase = 'kraken'; this.krakenT = G.debug ? 3 : 7; this.krakenUp = false;
+  }
+
+  // The final fight: the Kraken (kraken.js). Slay it and the voyage is won.
+  updateKraken(dt) {
+    const G = this.G, K = G.kraken;
+    if (!this.krakenUp) {
+      this.krakenT -= dt;
+      if (this.krakenT <= 0) { this.krakenUp = true; K.start(this.n - 1); }
+      return;
+    }
+    if (!K.done) return;
+    this.phase = 'won';
     G.events.emit('voyageWon', { voyage: this.n, name: this.name, next: this.n + 1 });
     this.wonT = G.debug ? 6 : 16;
   }
