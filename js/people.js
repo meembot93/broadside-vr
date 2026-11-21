@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Kit, FLAT, SMOOTH, QUALITY, segs, vary, addCutlass, addFist } from './kit.js';
+import { makeRigged, animateRigged, hasModel } from './rigged.js';
 import { heroBody, heroHead, heroArm, heroLeg, HERO_ARM_X, HERO_LEG_X, HERO_HEAD_SCALE } from './heroines.js';
 
 // Pirates in the style of the reference art: stocky, faceted low-poly shapes with flat
@@ -285,11 +286,26 @@ export const PEOPLE = { adult: false };
 const STAND_IN = {
   rogue: { type: 'swashbuckler', vest: 0x5a2a3a },
   raider: { type: 'deckhand', bandana: 0xc8a040 },
-  buccaneer: { type: 'sailor', vest: 0x6a1a1a },
+  buccaneer: { type: 'swashbuckler', vest: 0x6a1a1a },
 };
 const LOD_DIST = 9;
 
+// Types drawn with a high-detail model from models/ (rigged.js) in the Adults setting, once
+// it has loaded: [model, colour variation]. Their cutlass and colours come from the options.
+const RIGGED = {
+  buccaneer: ['lady', {}],
+  raider: ['lady', { hair: 0x9a3e1c, red: 0x1c1a1e }],
+  rogue: ['lady', { hair: 0x3a2214, red: 0x7a1420 }],
+};
+
 export function makePerson(o = {}) {
+  const rig = PEOPLE.adult && RIGGED[o.type];
+  if (rig && hasModel(rig[0])) {
+    const look = { ...rig[1], cutlass: !!o.cutlass };
+    if (o.bandana !== undefined) look.red = o.bandana;
+    if (o.hair !== undefined) look.hair = o.hair;
+    return makeRigged(rig[0], look, o.type);
+  }
   if (!PEOPLE.adult && STAND_IN[o.type]) o = { ...o, ...STAND_IN[o.type] };
   const R = rng(o.seed ?? Math.floor(Math.random() * 1e9));
   const pick = (a) => a[Math.floor(R() * a.length)];
@@ -363,6 +379,7 @@ export function makePerson(o = {}) {
 
 // attack: progress 0..1 of a swing (set p.attack = 0 to start one)
 export function animatePerson(p, dt, moving, t = 0) {
+  if (p.rig) { animateRigged(p, dt, moving, t); return; }
   if (p.dead) {
     p.deadT += dt;
     const u = Math.min(1, p.deadT / 0.6);

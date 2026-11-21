@@ -23,7 +23,7 @@ import { Net } from './net/net.js';
 import { Island } from './island.js';
 import { VERSION as VERSION_NOW } from './version.js';
 import { PEOPLE } from './people.js';
-import { DeckGuest } from './guest.js';
+import { loadModels } from './rigged.js';
 import { Kraken } from './kraken.js';
 
 const params = new URLSearchParams(location.search);
@@ -66,8 +66,8 @@ G.voyages = new Voyages(G);       // waves of enemies, boss fights, victory (see
 G.player = new Player(G);          // you, on this headset
 G.players = [G.player];             // everyone on board; friends are added by net.js
 G.items = G.player.items;           // muskets and cutlass on the rack (shared by the crew of players)
+await loadModels();                // the high-detail pirates (rigged.js)
 G.crew = new Crew(G);
-G.guest = new DeckGuest(G);      // Meem's Tripo-made pirate strolling the deck (Adults setting only)
 G.grapples = new Grapples(G);
 G.damage = new Damage(G);         // leaks, fires and snapped masts you fix by hand
 G.hud = new Hud(G);
@@ -106,7 +106,6 @@ G.setAdult = (on) => {
   on = !!on; if (on === G.adult) return;
   G.adult = PEOPLE.adult = on;
   G.crew.refreshLooks();
-  if (G.guest) G.guest.visible = on;
   for (const b of document.querySelectorAll('#rating button')) b.classList.toggle('on', (b.dataset.crew === 'adult') === on);
 };
 for (const b of document.querySelectorAll('#rating button')) {
@@ -446,7 +445,6 @@ function view(dt) {
   if (creakT <= 0) { creakT = rand(4, 9); _a.set(rand(-2, 2), 1, rand(-6, 6)); S.root.localToWorld(_a); G.audio.creak(_a); }
 
   G.grapples.view(dt);
-  G.guest.update(dt);
   G.damage.view(dt);
   G.island.view(dt);
   G.kraken.view(dt);
