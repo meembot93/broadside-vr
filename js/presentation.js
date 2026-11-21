@@ -244,7 +244,8 @@ export function wirePresentation(G) {
   on('enemyGrappled', ({ ship }) => { audio.swoosh(ship.root.position); hud.msg('They’ve thrown grapples! Stand by to repel boarders', 3.5); });
   on('shipsLashed', ({ by }) => {
     audio.woodHit(G.ship.root.position);
-    hud.msg(by === 'us' ? 'Lashed alongside! Climb over the rail to board' : 'They’re alongside! You can board them too', 3.5);
+    hud.msg(by === 'us' ? 'Lashed alongside! Time to board' : 'They’re alongside! You can board them too', 3.5);
+    hud.msg(G.mode === 'vr' ? 'GRIP the rope by the main mast to swing across' : 'Click the rope by the main mast to swing across', 4);
   });
   on('grappleReleased', ({ why }) => {
     if (why === 'theyCut') hud.msg('They’ve cut their lines and are pulling away', 3);
