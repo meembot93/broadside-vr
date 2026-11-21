@@ -54,6 +54,20 @@ export function hullX(z, y) {
   return w + 0.08;
 }
 
+// The raised quarterdeck over the stern cabin and the two stairs up to it (see buildHull and
+// buildDecor, which draw them from the same numbers). Ship-local, every ship the same.
+const Q_CW = halfWidth(7.3) * 2 * 0.99;
+export const QUARTER = { top: 1.55, z0: 7.3, z1: 9.3, x: Q_CW / 2 - 0.05 };
+// Each stair runs from the main deck at z0 up to the quarterdeck at z1, between |x| = x0 and x1
+export const STAIRS = { x0: QUARTER.x - 0.62, x1: QUARTER.x, z0: QUARTER.z0 - 5 * 0.19, z1: QUARTER.z0 };
+// How high the deck is under (x, z): 0 on the main deck, a ramp up the stairs, the quarterdeck
+export function deckFloor(x, z) {
+  if (z >= QUARTER.z0 && Math.abs(x) <= QUARTER.x) return QUARTER.top;
+  const ax = Math.abs(x);
+  if (z > STAIRS.z0 && ax >= STAIRS.x0 - 0.05 && ax <= STAIRS.x1 + 0.1) return QUARTER.top * clamp((z - STAIRS.z0) / (STAIRS.z1 - STAIRS.z0), 0, 1);
+  return 0;
+}
+
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
 const _s = new THREE.Vector3(), _m = new THREE.Matrix4();
 
@@ -201,8 +215,8 @@ export class Ship {
 
     // Raised quarterdeck over the stern cabin (the sheet's poop deck), overhanging the transom.
     // The cabin front has a door and windows; stairs climb up both sides; a balustrade runs
-    // along the front edge. Looks only: you can't walk up there.
-    const cw = halfWidth(7.3) * 2 * 0.99, QD = 1.55, QZ0 = 7.3, QZ1 = 9.3;
+    // along the front edge. You can walk up the stairs (deckFloor above, player.js clampToDeck).
+    const cw = Q_CW, QD = QUARTER.top, QZ0 = QUARTER.z0, QZ1 = QUARTER.z1;
     this.quarter = { cw, QD, QZ0, QZ1 };
     add(new THREE.BoxGeometry(cw, QD, QZ1 - QZ0), wallMat, 0, QD / 2, (QZ0 + QZ1) / 2);           // cabin block
     add(new THREE.BoxGeometry(cw + 0.3, 2.15, QZ1 - 8.0), hullMat, 0, QD - 1.08, (8.0 + QZ1) / 2); // overhanging stern

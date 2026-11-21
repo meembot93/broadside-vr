@@ -25,6 +25,7 @@ import { VERSION as VERSION_NOW } from './version.js';
 import { PEOPLE } from './people.js';
 import { loadModels } from './rigged.js';
 import { Kraken } from './kraken.js';
+import { RopeSwing } from './swing.js';
 
 const params = new URLSearchParams(location.search);
 // Crew setting picked on the title screen (remembered): 'kids' (default) or 'adult'. ?crew=adult works too.
@@ -69,6 +70,7 @@ G.items = G.player.items;           // muskets and cutlass on the rack (shared b
 await loadModels();                // the high-detail pirates (rigged.js)
 G.crew = new Crew(G);
 G.grapples = new Grapples(G);
+G.swing = new RopeSwing(G);        // swing across to a lashed ship on a rope (swing.js)
 G.damage = new Damage(G);         // leaks, fires and snapped masts you fix by hand
 G.hud = new Hud(G);
 G.island = new Island(G);        // treasure hunts between voyages
@@ -445,6 +447,7 @@ function view(dt) {
   if (creakT <= 0) { creakT = rand(4, 9); _a.set(rand(-2, 2), 1, rand(-6, 6)); S.root.localToWorld(_a); G.audio.creak(_a); }
 
   G.grapples.view(dt);
+  G.swing.view(dt);
   G.damage.view(dt);
   G.island.view(dt);
   G.kraken.view(dt);
