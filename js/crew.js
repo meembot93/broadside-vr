@@ -22,15 +22,12 @@ const HELM_STANDBY = [1.75, 4.3];
 export class Crew {
   constructor(G) {
     this.G = G;
+    // A small crew: Hawkins at the helm, Bones on the guns (either side) and Mags, the bosun,
+    // who also mans the grapple gun when you order "bring us alongside".
     const defs = [
-      { look: { type: 'gunner', bandana: 0xa82020, pants: 0x3b4a6b, hair: 0x3a2414, seed: 11 }, role: 'gunner', side: -1, home: [-1.15, -1.6], name: 'Bones' },
-      { look: { type: 'gunner', bandana: 0x2f5a8a, pants: 0x4a3b2b, patch: true, seed: 12 }, role: 'gunner', side: 1, home: [1.15, -1.6], name: 'Patch' },
-      { look: { type: 'deckhand', bandana: 0x6a8aa0, skin: 0x8d5a3b, seed: 13 }, role: 'grappler', side: 0, home: [0.0, -7.6], name: 'Finn' },
-      { look: { type: 'swashbuckler', skin: 0xa8734f, seed: 14 }, role: 'bosun', side: 0, home: [-1.5, 3.1], name: 'Mags' },
       { look: { type: 'sailor', vest: 0x24304a, hat: 0x3a2a20, beard: 0x8a8a8a, patch: false, seed: 15 }, role: 'helmsman', side: 0, home: HELM_STANDBY, name: 'Hawkins' },
-      { look: { type: 'rogue', seed: 16 }, role: 'bosun', side: 0, home: [1.6, 2.9], name: 'Rosa' },
-      { look: { type: 'raider', seed: 17 }, role: 'bosun', side: 0, home: [-1.9, -4.4], name: 'Goldie' },
-      { look: { type: 'buccaneer', seed: 18 }, role: 'bosun', side: 0, home: [1.9, -4.6], name: 'Scarlett' },
+      { look: { type: 'gunner', bandana: 0xa82020, pants: 0x3b4a6b, hair: 0x3a2414, seed: 11 }, role: 'gunner', side: 0, home: [-1.15, -1.6], name: 'Bones' },
+      { look: { type: 'buccaneer', seed: 14 }, role: 'bosun', side: 0, home: [-1.5, 3.1], name: 'Mags' },
     ];
     this.defs = defs;
     this.members = defs.map((d, i) => {
@@ -40,7 +37,7 @@ export class Crew {
       return { id: `crew:${i}`, name: d.name, p, role: d.role, side: d.side, home: new THREE.Vector3(d.home[0], 0, d.home[1]), atkCD: 0, victim: null, cannon: null, fireCD: 8,
         spot: null, spotT: 0, workT: 0, lastSail: null, aimT: 0, away: null };
     });
-    this.hm = this.members[4];
+    this.hm = this.members[0];
     // The helm: who steers (a player id, the helmsman's id, or null = wheel left where it is)
     G.ship.helmBy = 'player:0'; G.ship.helmTouchT = 0; G.ship.holdHeading = G.ship.heading;
     this.order = 'chase';
@@ -307,24 +304,30 @@ export class Crew {
     m.aimT = 0;
     // Reload duty: the gun on my side that has been reloading longest
     let rel = null;
-    for (const c of S.cannons) if (c.side === m.side && c.reload > 0.6 && (!rel || c.reload < rel.reload)) rel = c;
+    for (const c of S.cannons) if ((!m.side || c.side === m.side) && c.reload > 0.6 && (!rel || c.reload < rel.reload)) rel = c;
     if (rel) {
-      if (this.walk(m, m.side * 1.3, rel.z + 0.1, dt)) { facePerson(p, m.side, 0, dt, 5); p.pose = 'ram'; return true; }
+      if (this.walk(m, rel.side * 1.3, rel.z + 0.1, dt)) { facePerson(p, rel.side, 0, dt, 5); p.pose = 'ram'; return true; }
       return false;
     }
     // Watch duty: stroll between my guns and look out over the rail
     m.spotT -= dt;
-    if (!m.spot || m.spotT <= 0) { const zs = S.cannons.filter((c) => c.side === m.side).map((c) => c.z); m.spot = [m.side * 1.3, zs[Math.floor(Math.random() * zs.length)] - 0.4]; m.spotT = rand(5, 9); }
+    if (!m.spot || m.spotT <= 0) {
+      // (a gunner for both sides watches the side the enemy is on)
+      let side = m.side;
+      if (!side) { const e = this.nearestEnemy(); if (e) { _a.copy(e.root.position); S.root.worldToLocal(_a); side = Math.sign(_a.x) || 1; } else side = Math.random() < 0.5 ? -1 : 1; }
+      const zs = S.cannons.filter((c) => c.side === side).map((c) => c.z);
+      m.spot = [side * 1.3, zs[Math.floor(Math.random() * zs.length)] - 0.4]; m.spotT = rand(5, 9);
+    }
     if (this.walk(m, m.spot[0], m.spot[1], dt, 1.3)) {
       const e = this.nearestEnemy();
       if (e) { _a.copy(e.root.position); S.root.worldToLocal(_a); facePerson(p, _a.x - pos.x, _a.z - pos.z, dt, 2); }
-      else facePerson(p, m.side, -0.3, dt, 2);
+      else facePerson(p, Math.sign(m.spot[0]), -0.3, dt, 2);
       return true;
     }
     return false;
   }
 
-  // Finn mans the grapple gun on the bow whenever the captain isn't holding it. He keeps it
+  // Mags mans the grapple gun on the bow (when you order "bring us alongside") unless the captain holds it. He keeps it
   // trained on the nearest enemy, and under the order "bring us alongside" he fires it once
   // they're in reach.
   grappler(m, dt, t) {
@@ -362,7 +365,10 @@ export class Crew {
   // The bosun hauls on the lines whenever the sails are set or furled, and otherwise does
   // odd jobs around the deck (coiling rope, checking the rigging).
   bosun(m, dt) {
-    const S = this.G.ship, p = m.p;
+    const S = this.G.ship, p = m.p, gr = this.G.grapples;
+    // "Bring us alongside": man the grapple gun and hook the enemy
+    if (this.order === 'alongside' && S.alive && this.nearestEnemy()) return this.grappler(m, dt);
+    if (gr.heldBy === m.id) gr.heldBy = null;
     if (m.lastSail !== null && Math.abs(S.sail - m.lastSail) > 0.015) { m.workT = 2.5; m.spot = null; }
     m.lastSail = S.sail;
     if (m.workT > 0) {

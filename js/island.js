@@ -36,7 +36,7 @@ export const UPGRADES = {
   hull: { name: 'Iron-banded hull', text: '+50 hull and\niron straps', col: '#4a5260' },
 };
 const KINDS = Object.keys(UPGRADES);
-const SHORE_CREW = ['Mags', 'Rosa'];
+const SHORE_CREW = ['Mags', 'Bones'];
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -280,7 +280,7 @@ export class Island {
   }
 
   // ---------- The landing party ----------
-  // Where Mags and Rosa should be: with whoever is ashore, else in the boat, else on deck
+  // Where Mags and Bones should be: with whoever is ashore, else in the boat, else on deck
   placeCrew(want) {
     for (const m of this.shoreCrew()) {
       const cur = m.ashore ? 'shore' : m.inBoat ? 'boat' : 'ship';

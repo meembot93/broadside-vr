@@ -40,7 +40,9 @@ export class Voices {
 
   // Where a pirate's voice comes from: our crew by name, otherwise `at` (a person, a position or null).
   where(who, at) {
-    const m = this.G.crew.members.find((x) => x.name === who);
+    // (Finn's lines are said by Bones now that the crew is smaller)
+    const name = who === 'Finn' ? 'Bones' : who;
+    const m = this.G.crew.members.find((x) => x.name === name);
     const p = m ? m.p : at && at.g ? at : null;
     if (p) return p.g.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 1.6, 0));
     return at && at.isVector3 ? at.clone() : null;

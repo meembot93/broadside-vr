@@ -43,19 +43,20 @@ export const ENEMY_LOOKS = LOOKS; // island guards dress the same (island.js)
 // The boss: a captain in a crimson coat who stays at the wheel until you board, then comes for you.
 const BOSS_LOOK = { type: 'captain', coat: 0x7a1212, hat: 0x141010, sash: 0xc8a040, cutlass: true };
 
-// What each kind of enemy ship is like. Crew: [job, side, x, z] (where they start and,
-// for mates and riggers, where they keep watch).
+// What each kind of enemy ship is like. Crew: [job, side, x, z, look] (where they start and,
+// for mates and riggers, where they keep watch; look = which of LOOKS they wear).
+// Small crews of detailed pirates rather than crowds of simple ones.
 export const KINDS = {
-  // Small and quick, one gun a side, a crew of four
+  // Small and quick, one gun a side, a crew of three (the gunner serves both sides)
   sloop: { health: 70, maxSpeed: 8.4, turnRate: 0.3, reloadTime: 10, gunZ: [-1], ballDamage: 4,
-    crew: [['helm', 0, HELM_SPOT.x, HELM_SPOT.z], ['gunner', -1, -1.3, -0.6], ['gunner', 1, 1.3, -0.6], ['mate', 0, -0.9, 2.8]] },
-  // The all-rounder, two guns a side, five crew
+    crew: [['helm', 0, HELM_SPOT.x, HELM_SPOT.z, 0], ['gunner', 0, -1.3, -0.6, 1], ['mate', 0, -0.9, 2.8, 6]] },
+  // The all-rounder, two guns a side, four crew
   brigantine: { health: 110, maxSpeed: 7.6, turnRate: 0.22, reloadTime: 9, gunZ: [-3, 1], ballDamage: 5,
-    crew: [['helm', 0, HELM_SPOT.x, HELM_SPOT.z], ['gunner', -1, -1.3, -1], ['gunner', 1, 1.3, -1], ['rigger', 0, 0.9, -2.6], ['mate', 0, -0.9, 2.8]] },
-  // Big, slow and tough, three guns a side, eight crew
+    crew: [['helm', 0, HELM_SPOT.x, HELM_SPOT.z, 0], ['gunner', -1, -1.3, -1, 1], ['gunner', 1, 1.3, -1, 2], ['mate', 0, -0.9, 2.8, 7]] },
+  // Big, slow and tough, three guns a side, five crew
   galleon: { health: 200, maxSpeed: 6.6, turnRate: 0.16, reloadTime: 8, gunZ: [-3, 1, 3.6], ballDamage: 6,
-    crew: [['helm', 0, HELM_SPOT.x, HELM_SPOT.z], ['gunner', -1, -1.3, -1], ['gunner', 1, 1.3, -1], ['gunner', -1, -1.3, 3], ['gunner', 1, 1.3, 3],
-      ['rigger', 0, 0.9, -2.6], ['mate', 0, -0.9, 2.2], ['mate', 0, 0.8, -4.6]] },
+    crew: [['helm', 0, HELM_SPOT.x, HELM_SPOT.z, 0], ['gunner', -1, -1.3, -1, 1], ['gunner', 1, 1.3, -1, 2],
+      ['rigger', 0, 0.9, -2.6, 3], ['mate', 0, -0.9, 2.2, 8]] },
 };
 
 export class Enemies {
@@ -96,9 +97,9 @@ export class Enemies {
   // Faces come from a seed made from the ship's id, so every headset sees the same pirates.
   crewUp(s, K, boss) {
     const n = parseInt(s.id.split(':')[1]) || 0;
-    K.crew.forEach(([role, side, x, z], i) => {
+    K.crew.forEach(([role, side, x, z, look], i) => {
       const chief = boss && i === 0;
-      const p = makePerson({ ...(chief ? BOSS_LOOK : LOOKS[i % LOOKS.length]), seed: 1000 + n * 37 + i });
+      const p = makePerson({ ...(chief ? BOSS_LOOK : LOOKS[look ?? i % LOOKS.length]), seed: 1000 + n * 37 + i });
       if (chief) p.g.scale.setScalar(1.1);
       p.g.position.set(x, 0, z); s.root.add(p.g);
       s.crew.push({ id: `${s.id}/crew:${i}`, p, role, side, home: [x, z], hp: chief ? 8 : 2, maxHp: chief ? 8 : 2, boss: chief ? boss.name : null,
@@ -195,7 +196,7 @@ export class Enemies {
     if (A.mode === 'board' && dist < 24 && P.alive && G.players.some((pl) => !pl.dead)) {
       A.boardT -= dt;
       const live = this.boarders.filter((b) => b.state !== 'dead').length;
-      if (A.boardT <= 0 && live < 3 && A.sent < 5) { A.boardT = rand(4, 7); A.sent++; this.spawnBoarder(e); }
+      if (A.boardT <= 0 && live < 2 && A.sent < 4) { A.boardT = rand(4, 7); A.sent++; this.spawnBoarder(e); }
     }
   }
 
@@ -207,7 +208,7 @@ export class Enemies {
     if (e.lock.phase !== 'locked') return;
     A.boardT -= dt;
     const live = this.boarders.filter((b) => b.state !== 'dead').length;
-    if (A.boardT <= 0 && live < 3 && A.sent < 5) { A.boardT = rand(4, 7); A.sent++; this.spawnBoarder(e); }
+    if (A.boardT <= 0 && live < 2 && A.sent < 4) { A.boardT = rand(4, 7); A.sent++; this.spawnBoarder(e); }
   }
 
   // A ship with nobody left aboard: loose rudder, sails slowly spilling their wind.

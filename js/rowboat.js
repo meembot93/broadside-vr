@@ -22,7 +22,7 @@ import { angleWrap, clamp, damp } from './util.js';
 export const LADDER_Z = 2.6;                 // ship-local z of the ladder (aft of the guns)
 const HALF = 3.1;                            // half the boat's length
 const SEAT_Z = [0.55, -0.85, 1.75, -2.05];   // where players sit (player 0..3); the first two have oars
-const CREW_SPOT = [[-0.33, 2.62], [0.33, 2.62]]; // Mags and Rosa in the stern sheets
+const CREW_SPOT = [[-0.33, 2.62], [0.33, 2.62]]; // Mags and Bones in the stern sheets
 const LOW = -1.45;                           // ladder foot (ship-local y)
 const STATES = ['moored', 'free', 'beached', 'pushoff'];
 export const halfBeam = (z) => { const u = clamp(z / HALF, -1, 1); return 0.86 * (1 - (u < 0 ? 0.97 : 0.42) * u * u); };
@@ -268,9 +268,9 @@ export class Rowboat {
 
   worldPos() { return new THREE.Vector3(this.x, 0.4, this.z); }
 
-  // Mags and Rosa ride in the stern sheets (crew.js asks each frame)
+  // Mags and Bones ride in the stern sheets (crew.js asks each frame)
   crewSit(m) {
-    const i = Math.max(0, ['Mags', 'Rosa'].indexOf(m.name));
+    const i = Math.max(0, ['Mags', 'Bones'].indexOf(m.name));
     if (m.p.g.parent !== this.frame.root) this.frame.root.add(m.p.g);
     m.p.g.position.set(CREW_SPOT[i][0], -0.37, CREW_SPOT[i][1]); m.p.g.rotation.set(0, 0, 0);
     m.p.pose = 'sit'; m.p.sword.visible = false;

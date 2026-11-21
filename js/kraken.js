@@ -43,17 +43,125 @@ const BLEND = { under: 1.1, hurt: 0.9, idle: 1.3, grab: 1.1, raise: 1.0, slam: 0
 // Head phases and how long they last
 const RISE = 3.2, DIVE = 3.2, STIR = 4, DYING = 6;
 
-const smooth = (x) => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
 const _e = new THREE.Vector3(), _o = new THREE.Vector3(), _r = new THREE.Vector3(), _q = new THREE.Quaternion();
 
 // ---------- Looks ----------
+// Painted at load time on small canvases: a wet, warty skin (colour + bumps) for the head,
+// and a strip with two rows of suckers for the underside of the tentacles. The bumps become
+// a normal map, so the light catches every wart and sucker rim without extra triangles.
+function hash(x, y) { let h = (x * 374761393 + y * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function vnoise(x, y, P) { // tileable value noise, period P
+  const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi;
+  const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), m = (a) => ((a % P) + P) % P;
+  const a = hash(m(xi), m(yi)), b = hash(m(xi + 1), m(yi)), c = hash(m(xi), m(yi + 1)), d = hash(m(xi + 1), m(yi + 1));
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+const fbm = (x, y, P, o = 4) => { let s = 0, w = 0.5, f = 1; for (let i = 0; i < o; i++) { s += w * vnoise(x * f, y * f, P * f); w *= 0.5; f *= 2; } return s; };
+
+// Height field -> normal map (tileable)
+function normalTex(H, N, strength) {
+  const c = document.createElement('canvas'); c.width = c.height = N;
+  const g = c.getContext('2d'), img = g.createImageData(N, N), d = img.data;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const hx = H[y * N + (x + 1) % N] - H[y * N + (x + N - 1) % N], hy = H[((y + 1) % N) * N + x] - H[((y + N - 1) % N) * N + x];
+    let nx = -hx * strength, ny = hy * strength, nz = 1; const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+    const i = (y * N + x) * 4; d[i] = (nx * 0.5 + 0.5) * 255; d[i + 1] = (ny * 0.5 + 0.5) * 255; d[i + 2] = (nz * 0.5 + 0.5) * 255; d[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  return t;
+}
+function colorTex(N, fn) {
+  const c = document.createElement('canvas'); c.width = c.height = N;
+  const g = c.getContext('2d'), img = g.createImageData(N, N), d = img.data;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { const [r, gg, b] = fn(x, y), i = (y * N + x) * 4; d[i] = r; d[i + 1] = gg; d[i + 2] = b; d[i + 3] = 255; }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+
+// Skin detail (grey-ish, multiplied over the body colours in the shaders): mottled blotches,
+// fine wrinkles and scattered warts.
+let SKIN = null;
+function skinTextures() {
+  if (SKIN) return SKIN;
+  const N = 512, H = new Float32Array(N * N), C = new Float32Array(N * N);
+  const warts = [];
+  for (let i = 0; i < 150; i++) warts.push([hash(i, 7) * N, hash(i, 11) * N, 2.5 + Math.pow(hash(i, 13), 2) * 11]);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const u = x / N * 8, v = y / N * 8;
+    const blotch = fbm(u, v, 8, 4);
+    const wr = Math.abs(fbm(u * 2.2 + 3, v * 4.4, 16, 3) - 0.5); // creases
+    let h = blotch * 0.6 - wr * 1.6;
+    C[y * N + x] = blotch;
+    H[y * N + x] = h;
+  }
+  for (const [wx, wy, r] of warts) {
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      const q = 1 - (dx * dx + dy * dy) / (r * r); if (q <= 0) continue;
+      const x = ((Math.round(wx + dx) % N) + N) % N, y = ((Math.round(wy + dy) % N) + N) % N;
+      H[y * N + x] += Math.sqrt(q) * r * 0.09; C[y * N + x] += q * 0.25;
+    }
+  }
+  const color = colorTex(N, (x, y) => {
+    const c = C[y * N + x], k = 0.62 + c * 0.6;
+    return [Math.min(255, 255 * k), Math.min(255, 235 * k), Math.min(255, 235 * k)];
+  });
+  SKIN = { color, normal: normalTex(H, N, 3.0) };
+  return SKIN;
+}
+
+// Tentacle strip: x = round the tentacle (the inside, where the suckers are, is in the
+// middle), y = along it, one tile as long as the tentacle is round.
+let SUCK = null;
+function suckerTextures() {
+  if (SUCK) return SUCK;
+  const N = 512, H = new Float32Array(N * N), C = new Float32Array(N * N * 3);
+  const top = [92, 20, 34], side = [150, 44, 52], belly = [236, 176, 160];
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const u = x / N, v = y / N, a = Math.abs(u - 0.5) * 2; // 0 = inside middle, 1 = outside middle
+    const blotch = fbm(u * 8, v * 8, 8, 4), wr = Math.abs(fbm(u * 16 + 5, v * 8, 16, 3) - 0.5);
+    // colour: pale belly fading through red sides to a dark mottled back
+    const kb = 1 - smooth((a - 0.2) / 0.22), kt = smooth((a - 0.45) / 0.4);
+    let col = [0, 1, 2].map((i) => side[i] + (top[i] - side[i]) * kt);
+    col = col.map((c, i) => c + (belly[i] - c) * kb);
+    const mot = 0.7 + blotch * 0.6 - (kt > 0.5 ? smooth((blotch - 0.55) / 0.1) * 0.35 : 0);
+    const o = (y * N + x) * 3; C[o] = col[0] * mot; C[o + 1] = col[1] * mot; C[o + 2] = col[2] * mot;
+    H[y * N + x] = blotch * 0.5 - wr * 1.4 * (1 - kb);
+  }
+  // Two staggered rows of suckers: a raised rim with a deep cup in the middle
+  const R = 0.06 * N;
+  for (let row = 0; row < 2; row++) for (let k = 0; k < 5; k++) {
+    const cx = (0.5 + (row ? 0.075 : -0.075)) * N, cy = ((k + row * 0.5) / 5) * N;
+    for (let dy = -R - 4; dy <= R + 4; dy++) for (let dx = -R - 4; dx <= R + 4; dx++) {
+      const r = Math.hypot(dx, dy) / R; if (r > 1.15) continue;
+      const x = Math.round(cx + dx), y = ((Math.round(cy + dy) % N) + N) % N, i = y * N + x, o = i * 3;
+      // height: smooth mound, rim ring, cup
+      const mound = r < 1.15 ? Math.cos(Math.min(1, r / 1.15) * Math.PI / 2) * 1.6 : 0;
+      const cup = r < 0.62 ? -2.2 * Math.cos(r / 0.62 * Math.PI / 2) : 0;
+      H[i] = H[i] * (1 - Math.min(1, mound)) + mound * 1.4 + cup;
+      const rim = Math.exp(-((r - 0.72) ** 2) / 0.012);
+      let c = r < 0.95 ? [248, 214, 196] : [236, 180, 166];
+      if (r < 0.62) { const q = r / 0.62; c = [170 + 60 * q, 80 + 80 * q, 92 + 60 * q]; }
+      if (r < 0.22) c = [96, 30, 44];
+      const w = r < 1 ? 1 : 1 - (r - 1) / 0.15;
+      for (let j = 0; j < 3; j++) C[o + j] = C[o + j] * (1 - w) + Math.min(255, c[j] + rim * 20) * w;
+    }
+  }
+  SUCK = { color: colorTex(N, (x, y) => { const o = (y * N + x) * 3; return [C[o], C[o + 1], C[o + 2]]; }), normal: normalTex(H, N, 2.2) };
+  return SUCK;
+}
+function smooth(x) { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); }
+
 // A unit tube: x, y = round the ring (cos, sin), z = 0..1 along it. The shader bends it.
+// uv: x round the ring (the inside in the middle), y along it (filled in per tentacle).
 function tubeGeometry(nu, nr) {
-  const pos = [], idx = [];
+  const pos = [], uv = [], idx = [];
   for (let i = 0; i <= nu; i++) for (let j = 0; j <= nr; j++) {
     const th = (j / nr) * Math.PI * 2;
     pos.push(Math.cos(th), Math.sin(th), i / nu);
+    uv.push(j / nr + 0.5, 0);
   }
   for (let i = 0; i < nu; i++) for (let j = 0; j < nr; j++) {
     const a = i * (nr + 1) + j, b = a + nr + 1;
@@ -61,43 +169,47 @@ function tubeGeometry(nu, nr) {
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx);
   g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 50);
   return g;
 }
-const TUBE = tubeGeometry(44, 10);
+const NU = 72, NR = 18;
+const tubes = new Map(); // one geometry per (thickness, length): the sucker spacing follows the radius
+const radiusAt = (r0, r1, ku) => mix(r0, r1, Math.pow(ku, 0.75)) * (1 - 0.85 * smooth((ku - 0.84) / 0.16));
+function mix(a, b, k) { return a + (b - a) * k; }
+function tubeFor(r0, r1, len) {
+  const key = `${r0}|${r1}|${len}`;
+  if (tubes.has(key)) return tubes.get(key);
+  const g = tubeGeometry(NU, NR), uv = g.attributes.uv;
+  // Along the tentacle, one texture tile per circumference, so suckers shrink toward the tip
+  let v = 0;
+  for (let i = 0; i <= NU; i++) {
+    const ku = i / NU;
+    if (i) v += (len / NU) / (2 * Math.PI * Math.max(0.03, radiusAt(r0, r1, ku - 0.5 / NU)));
+    for (let j = 0; j <= NR; j++) uv.setY(i * (NR + 1) + j, v);
+  }
+  tubes.set(key, g);
+  return g;
+}
 
 const TENTACLE_VERT_HEAD = `
-uniform vec3 uP0, uP1, uP2, uP3, uIn; uniform float uTime, uR0, uR1, uSeed, uWrithe;
+uniform vec3 uP0, uP1, uP2, uP3, uIn; uniform float uTime, uR0, uR1, uSeed, uWrithe, uCurl;
 varying float vKU; varying float vKA;
 vec3 kBez(float u){ float v = 1.0 - u; return v*v*v*uP0 + 3.0*v*v*u*uP1 + 3.0*v*u*u*uP2 + u*u*u*uP3; }
 vec3 kBezD(float u){ float v = 1.0 - u; return 3.0*v*v*(uP1-uP0) + 6.0*v*u*(uP2-uP1) + 3.0*u*u*(uP3-uP2); }
 `;
-const TENTACLE_FRAG = `
-{
-  float kIn = cos(vKA);
-  vec3 top = vec3(0.40, 0.075, 0.12), under = vec3(0.92, 0.62, 0.55);
-  float spots = smoothstep(0.35, 0.8, sin(vKU*61.0 + vKA*3.0) * sin(vKU*23.0 - vKA*5.0 + 1.3));
-  vec3 c = mix(top, top * 0.5, spots * 0.8);
-  c = mix(c, under, smoothstep(0.15, 0.6, kIn));
-  // two rows of suckers along the inside
-  float f = fract(vKU * 30.0 + (vKA > 0.0 ? 0.5 : 0.0));
-  float dA = abs(abs(vKA) - 0.45) * 2.2;
-  float d = length(vec2(f - 0.5, dA));
-  float on = step(abs(vKA), 1.0) * (1.0 - smoothstep(0.93, 0.99, vKU)) * smoothstep(0.0, 0.04, vKU);
-  c = mix(c, vec3(1.0, 0.84, 0.76), on * smoothstep(0.44, 0.36, d));
-  c = mix(c, vec3(0.5, 0.18, 0.2), on * smoothstep(0.24, 0.16, d));
-  diffuseColor.rgb *= c;
-}`;
 
 // One tentacle: a tube bent along a cubic curve (4 points, local to its parent)
 class TentacleMesh {
-  constructor(parent, r0, r1, seed) {
+  constructor(parent, r0, r1, seed, len = 13) {
     this.u = {
       uP0: { value: new THREE.Vector3() }, uP1: { value: new THREE.Vector3() }, uP2: { value: new THREE.Vector3() }, uP3: { value: new THREE.Vector3() },
       uIn: { value: new THREE.Vector3(1, 0, 0) }, uTime: { value: 0 }, uR0: { value: r0 }, uR1: { value: r1 }, uSeed: { value: seed }, uWrithe: { value: 0.22 },
+      uCurl: { value: r0 * 1.6 },
     };
-    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const T = suckerTextures();
+    const mat = new THREE.MeshPhongMaterial({ map: T.color, normalMap: T.normal, normalScale: new THREE.Vector2(1, 1), specular: 0x4a3a3a, shininess: 38 });
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.u);
       sh.vertexShader = sh.vertexShader
@@ -109,18 +221,25 @@ class TentacleMesh {
           if (dot(kB, kB) < 1e-4) kB = cross(kT, vec3(0.0, 0.0, 1.0));
           kB = normalize(kB);
           vec3 kN = cross(kB, kT);
-          float kr = mix(uR0, uR1, pow(ku, 0.75)) * (1.0 - 0.85 * smoothstep(0.84, 1.0, ku)) * (1.0 + 0.05 * sin(ku * 70.0));
-          vec3 kC = kBez(ku) + kB * sin(ku * 9.0 - uTime * 3.1 + uSeed) * uWrithe * ku;
-          vec3 kDir = kN * position.x + kB * position.y;
-          vec3 objectNormal = kDir;
+          float kr = mix(uR0, uR1, pow(ku, 0.75)) * (1.0 - 0.85 * smoothstep(0.84, 1.0, ku)) * (1.0 + 0.035 * sin(ku * 70.0));
+          float kTip = smoothstep(0.7, 1.0, ku);
+          vec3 kC = kBez(ku) + kB * sin(ku * 9.0 - uTime * 3.1 + uSeed) * uWrithe * ku
+                  + kN * kTip * kTip * uCurl * (0.8 + 0.3 * sin(uTime * 1.7 + uSeed))
+                  + kB * kTip * kTip * uCurl * 0.5 * sin(uTime * 2.3 + uSeed * 2.0);
+          // a little flatter on the sucker side, like a real tentacle
+          vec2 kRing = vec2(position.x * (position.x > 0.0 ? 0.82 : 1.0), position.y);
+          vec3 kDir = kN * kRing.x + kB * kRing.y;
+          vec3 objectNormal = kN * position.x + kB * position.y;
           vKU = ku; vKA = atan(position.y, position.x);`)
         .replace('#include <begin_vertex>', 'vec3 transformed = kC + kDir * kr;');
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', '#include <common>\nvarying float vKU; varying float vKA;')
-        .replace('#include <color_fragment>', '#include <color_fragment>\n' + TENTACLE_FRAG);
+        .replace('#include <color_fragment>', `#include <color_fragment>
+          // the tip goes pale
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.2, 1.05, 1.05), smoothstep(0.85, 1.0, vKU));`);
     };
-    mat.customProgramCacheKey = () => 'kraken-tentacle';
-    this.mesh = new THREE.Mesh(TUBE, mat);
+    mat.customProgramCacheKey = () => 'kraken-tentacle2';
+    this.mesh = new THREE.Mesh(tubeFor(r0, r1, len), mat);
     this.mesh.frustumCulled = false;
     parent.add(this.mesh);
   }
@@ -131,50 +250,110 @@ class TentacleMesh {
   }
 }
 
-// Mottled skin for the head (and the brows merged into it), gently breathing
+// Wet, warty skin for the head, dark crimson on top, paler below, gently breathing
 function skinMaterial(uTime) {
-  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const T = skinTextures();
+  const mat = new THREE.MeshPhongMaterial({ map: T.color, normalMap: T.normal, normalScale: new THREE.Vector2(1.4, 1.4), specular: 0x504040, shininess: 30 });
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = uTime;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nuniform float uTime; varying vec3 vKP;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vKP = position;
-        transformed += normal * (0.16 * sin(position.y * 1.3 - uTime * 1.6) + 0.1 * sin(position.x * 2.1 + position.z * 1.7 + uTime));`);
+        transformed += normal * (0.12 * sin(position.y * 1.3 - uTime * 1.6) + 0.07 * sin(position.x * 2.1 + position.z * 1.7 + uTime));`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vKP;')
       .replace('#include <color_fragment>', `#include <color_fragment>
         {
-          vec3 top = vec3(0.36, 0.06, 0.1), low = vec3(0.62, 0.2, 0.2);
-          vec3 c = mix(low, top, smoothstep(-1.0, 6.0, vKP.y));
-          float sp = sin(vKP.x * 2.3 + sin(vKP.y * 1.7)) * sin(vKP.y * 2.9 + vKP.z * 1.9) * sin(vKP.z * 2.1 - vKP.x);
-          c *= 1.0 - 0.45 * smoothstep(0.15, 0.5, sp);
-          c += vec3(0.25, 0.12, 0.08) * smoothstep(0.7, 0.95, sin(vKP.y * 3.1 + sin(vKP.x * 1.3 + vKP.z) * 2.5)) * 0.25;
-          diffuseColor.rgb *= c;
+          vec3 top = vec3(0.22, 0.03, 0.07), low = vec3(0.62, 0.2, 0.2);
+          vec3 c = mix(low, top, smoothstep(-2.0, 4.5, vKP.y + vKP.z * 0.25));
+          // darker veins running up the mantle
+          float vein = smoothstep(0.92, 0.99, sin(atan(vKP.x, -vKP.z) * 9.0 + sin(vKP.y * 0.9) * 1.6));
+          c *= 1.0 - 0.3 * vein * smoothstep(1.0, 5.0, vKP.y);
+          diffuseColor.rgb *= c * 1.15;
         }`);
   };
-  mat.customProgramCacheKey = () => 'kraken-skin';
+  mat.customProgramCacheKey = () => 'kraken-skin2';
   return mat;
 }
 
-// The head: a huge bulging mantle leaning back, two glowing eyes under heavy brows.
-// Built facing +Z, with the waterline at y = 0.
+// Eye: amber iris with dark rings and a slit pupil, glowing a little
+let EYE = null;
+function eyeTexture() {
+  if (EYE) return EYE;
+  EYE = canvasTex(256, 256, (g) => {
+    const gr = g.createRadialGradient(128, 128, 10, 128, 128, 128);
+    gr.addColorStop(0, '#ffe680'); gr.addColorStop(0.35, '#ffa010'); gr.addColorStop(0.75, '#c84a06'); gr.addColorStop(0.92, '#6a2004'); gr.addColorStop(1, '#2a0a04');
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+    g.strokeStyle = 'rgba(120,40,0,0.45)'; g.lineWidth = 2;
+    for (let i = 0; i < 90; i++) { const a = i / 90 * Math.PI * 2, r0 = 40 + hash(i, 3) * 20; g.beginPath(); g.moveTo(128 + Math.cos(a) * r0, 128 + Math.sin(a) * r0); g.lineTo(128 + Math.cos(a) * 118, 128 + Math.sin(a) * 118); g.stroke(); }
+    g.fillStyle = '#080204'; g.beginPath(); g.ellipse(128, 128, 18, 86, 0, 0, Math.PI * 2); g.fill();
+  });
+  return EYE;
+}
+
+// Smooth noise in 3D (for sculpting the head)
+function n3(x, y, z) { return (Math.sin(x * 1.7 + Math.sin(y * 2.3 + z)) * Math.sin(y * 1.9 + Math.sin(z * 2.1 + x)) * Math.sin(z * 1.3 + Math.sin(x * 2.7 + y))); }
+
+// The head: a huge wrinkled mantle leaning back, a broad face with two great slit-pupilled
+// eyes deep under bony brows. Built facing +Z, with the waterline at y = 0.
+const EYE_AT = [2.35, 1.5, 3.45];
 function buildHead(uTime) {
   const g = new THREE.Group();
-  const prof = [[0.01, -4.5], [2.6, -4.1], [4.0, -2.6], [4.5, -0.4], [4.45, 1.6], [4.7, 3.6], [4.6, 5.8], [3.9, 8.0], [2.7, 9.7], [1.3, 10.8], [0.01, 11.2]]
-    .map(([r, y]) => new THREE.Vector2(r, y));
-  const mantle = new THREE.LatheGeometry(prof, 40).rotateX(-0.32);
-  const brows = [-1, 1].map((s) => new THREE.SphereGeometry(1.15, 14, 10).scale(1.35, 0.5, 0.9).rotateZ(-s * 0.32).translate(s * 2.2, 2.55, 3.55));
-  const strip = (geo) => { geo.deleteAttribute('uv'); return geo; };
-  g.add(new THREE.Mesh(mergeGeometries([mantle, ...brows].map(strip)), skinMaterial(uTime)));
-  const irises = [], pupils = [];
-  for (const s of [-1, 1]) {
-    const m = new THREE.Matrix4().makeRotationY(s * 0.55).setPosition(s * 2.3, 1.45, 3.55);
-    irises.push(new THREE.SphereGeometry(0.95, 18, 14).applyMatrix4(m));
-    pupils.push(new THREE.SphereGeometry(0.5, 12, 10).scale(0.42, 1.5, 0.4).translate(0, 0, 0.66).applyMatrix4(m));
+  const prof = new THREE.SplineCurve([[0.01, -4.5], [2.8, -4.0], [4.2, -2.4], [4.6, -0.3], [4.4, 1.7], [4.75, 3.6], [4.7, 5.8], [4.0, 8.1], [2.8, 9.8], [1.3, 10.9], [0.01, 11.3]]
+    .map(([r, y]) => new THREE.Vector2(r, y))).getPoints(56);
+  const SEG = 72, mantle = new THREE.LatheGeometry(prof, SEG);
+  // (the lathe's first and last columns are the same seam: give them the same normals)
+  const seam = () => {
+    const n = mantle.attributes.normal, L = prof.length;
+    for (let j = 0; j < L; j++) {
+      const a = j, b = SEG * L + j;
+      const x = n.getX(a) + n.getX(b), y = n.getY(a) + n.getY(b), z = n.getZ(a) + n.getZ(b), l = Math.hypot(x, y, z) || 1;
+      n.setXYZ(a, x / l, y / l, z / l); n.setXYZ(b, x / l, y / l, z / l);
+    }
+  };
+  // Sculpt: eye sockets and brow ridges, a groove between the eyes, a wrinkled neck, lumps
+  const pos = mantle.attributes.position, nrm = new THREE.Vector3(), p = new THREE.Vector3();
+  mantle.rotateY(Math.PI); // (seam round the back)
+  mantle.computeVertexNormals(); seam();
+  const N = mantle.attributes.normal;
+  for (let i = 0; i < pos.count; i++) {
+    p.fromBufferAttribute(pos, i); nrm.fromBufferAttribute(N, i);
+    let d = 0;
+    for (const s of [-1, 1]) {
+      const ex = p.x - s * EYE_AT[0], ey = p.y - EYE_AT[1], front = smooth((p.z - 1.5) / 1.5);
+      const r2 = ex * ex + ey * ey;
+      d -= 0.75 * Math.exp(-r2 / 1.0) * front;                                 // socket
+      d += 0.75 * Math.exp(-((ex * 0.8) ** 2 + (ey - 1.35) ** 2 * 3) / 0.9) * front; // brow ridge
+      d += 0.4 * Math.exp(-((ex * 0.9) ** 2 + (ey + 1.3) ** 2 * 2.5) / 0.8) * front; // cheek
+    }
+    d -= 0.35 * Math.exp(-(p.x * p.x) / 0.25) * smooth((p.z - 2) / 1.5) * Math.exp(-((p.y - 2.6) ** 2) / 4); // groove between the eyes
+    d += 0.18 * Math.sin(p.y * 4.2 + Math.sin(Math.atan2(p.x, p.z) * 3) * 0.8) * smooth((4.5 - p.y) / 2) * smooth((p.y + 1) / 2); // folds
+    d += 0.22 * n3(p.x * 0.6, p.y * 0.6, p.z * 0.6) + 0.08 * n3(p.x * 1.6 + 3, p.y * 1.6, p.z * 1.6);
+    p.addScaledVector(nrm, d);
+    pos.setXYZ(i, p.x, p.y, p.z);
   }
-  g.add(new THREE.Mesh(mergeGeometries(irises), new THREE.MeshBasicMaterial({ color: 0xffc21a })));
-  g.add(new THREE.Mesh(mergeGeometries(pupils), new THREE.MeshBasicMaterial({ color: 0x0a0505 })));
+  mantle.rotateX(-0.32);
+  mantle.computeVertexNormals(); seam();
+  // uv repeats so the skin detail isn't stretched over such a big head
+  const uv = mantle.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 6, uv.getY(i) * 4);
+  g.add(new THREE.Mesh(mantle, skinMaterial(uTime)));
+  // Eyes (bulging, glossy) with lids
+  const eyeMat = new THREE.MeshPhongMaterial({ map: eyeTexture(), emissive: 0x6a3000, emissiveMap: eyeTexture(), specular: 0xffffff, shininess: 120 });
+  const lidMat = skinMaterial(uTime);
+  for (const s of [-1, 1]) {
+    const m = new THREE.Matrix4().makeRotationY(s * 0.45).setPosition(s * EYE_AT[0], EYE_AT[1] - 0.05, EYE_AT[2] + 0.25);
+    const eg = new THREE.SphereGeometry(1.1, 32, 24).rotateX(Math.PI / 2).scale(1, 1, 0.75);
+    { const ep = eg.attributes.position, euv = eg.attributes.uv; for (let i = 0; i < ep.count; i++) euv.setXY(i, ep.getX(i) * 0.5 + 0.5, ep.getY(i) * 0.5 + 0.5); }
+    const eye = new THREE.Mesh(eg, eyeMat);
+    eye.geometry.applyMatrix4(m); g.add(eye);
+    // heavy upper lid drooping over the top of the eye, and a lower one
+    const lid = new THREE.SphereGeometry(1.2, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.3).rotateX(0.5).rotateZ(s * 0.32).scale(1.1, 1, 0.85).translate(0, 0.05, -0.15);
+    const low = new THREE.SphereGeometry(1.18, 32, 8, 0, Math.PI * 2, Math.PI * 0.8, Math.PI * 0.2).rotateX(-0.2).scale(1.08, 1, 0.85).translate(0, 0, -0.15);
+    g.add(new THREE.Mesh(mergeGeometries([lid.applyMatrix4(m), low.applyMatrix4(m)]), lidMat));
+  }
+  // Short tentacle stubs curling round the face below the eyes (looks only)
+  g.userData.lips = [];
   return g;
 }
 
@@ -188,12 +367,13 @@ export class Kraken {
     // The head lives in a frame that follows our ship's position and heading (but not her rocking)
     this.frame = new THREE.Group(); G.scene.add(this.frame);
     this.head = buildHead(this.uTime); this.head.scale.setScalar(HEAD_SCALE); this.frame.add(this.head);
-    this.headFlare = [new TentacleMesh(this.head, 1.0, 0.35, 1.7), new TentacleMesh(this.head, 1.0, 0.35, 4.2)]; // two curling beside the head (looks only)
+    // four more curling round the head, two beside it and two in front of its face (looks only)
+    this.headFlare = [1.7, 4.2, 2.9, 5.6].map((sd, i) => new TentacleMesh(this.head, i < 2 ? 1.0 : 0.75, i < 2 ? 0.3 : 0.22, sd, i < 2 ? 11 : 8));
     this.frame.visible = false;
     this.tents = SLOTS.map((sl, i) => {
       const tn = { i, z0: sl.z, d: sl.d, far: !!sl.far, state: 'under', prev: 'under', t0: -9, tx: 0, tz: 0, hp: TENT_HP, next: 0, sq: 0, cd: 0, hurtCD: {},
         seed: i * 1.93 + 0.4, pts: Array.from({ length: 9 }, () => new THREE.Vector3()), P: [0, 1, 2, 3].map(() => new THREE.Vector3()) };
-      tn.view = new TentacleMesh(G.ship.root, 0.78, 0.14, tn.seed);
+      tn.view = new TentacleMesh(G.ship.root, 0.85, 0.12, tn.seed, 14);
       tn.view.mesh.visible = false;
       // A dark shadow on deck where a raised tentacle is about to come down
       tn.shadow = new THREE.Mesh(new THREE.CircleGeometry(1.5, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x100008, transparent: true, opacity: 0, depthWrite: false }));
@@ -576,12 +756,21 @@ export class Kraken {
     if (this.phase === 'dying') this.head.rotation.z += smooth((t - this.t0) / DYING) * 0.6;
     // The two flailing beside the head
     this.headFlare.forEach((f, i) => {
-      const s = i ? 1 : -1, w = t * 1.1 + i * 2;
+      const s = i % 2 ? 1 : -1, w = t * 1.1 + i * 2;
       const P = this._F || (this._F = [0, 1, 2, 3].map(() => new THREE.Vector3()));
-      P[0].set(s * 3.4, -3, 2); P[1].set(s * 5.5, 1, 3.5);
-      P[2].set(s * (7 + Math.sin(w) * 1.2), 5 + Math.cos(w * 0.8), 5 + Math.sin(w * 0.7) * 1.5);
-      P[3].set(s * (5.5 + Math.sin(w * 1.4) * 1.5), 7.5 + Math.sin(w * 1.1) * 1.2, 7 + Math.cos(w * 0.9) * 1.5);
-      f.u.uIn.value.set(-s, 0, 0); f.set(P, t);
+      if (i < 2) {
+        P[0].set(s * 3.4, -9, 1.0); P[1].set(s * 5.5, 0, 3.5);
+        P[2].set(s * (7 + Math.sin(w) * 1.2), 5 + Math.cos(w * 0.8), 5 + Math.sin(w * 0.7) * 1.5);
+        P[3].set(s * (5.5 + Math.sin(w * 1.4) * 1.5), 7.5 + Math.sin(w * 1.1) * 1.2, 7 + Math.cos(w * 0.9) * 1.5);
+        f.u.uIn.value.set(-s, 0, 0);
+      } else {
+        // in front of the face, rising out of the water and curling back toward it
+        P[0].set(s * 2.0, -8, 2.2); P[1].set(s * 2.8, -1.0, 5.6);
+        P[2].set(s * (4.4 + Math.sin(w) * 0.7), 0.4 + Math.cos(w * 0.9) * 0.5, 7.0 + Math.sin(w * 0.7) * 0.8);
+        P[3].set(s * (5.6 + Math.sin(w * 1.3) * 0.8), 1.4 + Math.sin(w * 1.2) * 0.6, 5.4 + Math.cos(w * 0.8) * 0.8);
+        f.u.uIn.value.set(0, 0, -1);
+      }
+      f.set(P, t);
     });
     // A bubbling, churning patch where it's about to come up
     if ((this.phase === 'stir' || (this.phase === 'rise' && lift < -2)) && Math.random() < dt * 30) {
