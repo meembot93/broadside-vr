@@ -24,6 +24,7 @@ import { Island } from './island.js';
 import { VERSION as VERSION_NOW } from './version.js';
 import { PEOPLE } from './people.js';
 import { DeckGuest } from './guest.js';
+import { Kraken } from './kraken.js';
 
 const params = new URLSearchParams(location.search);
 // Crew setting picked on the title screen (remembered): 'kids' (default) or 'adult'. ?crew=adult works too.
@@ -71,6 +72,7 @@ G.grapples = new Grapples(G);
 G.damage = new Damage(G);         // leaks, fires and snapped masts you fix by hand
 G.hud = new Hud(G);
 G.island = new Island(G);        // treasure hunts between voyages
+G.kraken = new Kraken(G);        // the sea monster at the end of each voyage
 G.player.setupVR(renderer);
 G.net = new Net(G);
 
@@ -351,7 +353,9 @@ function aimPlayerCannons() {
   const S = G.ship;
   // Real enemies first; a drifting or captured hull only if nothing else is in the arc
   const rank = (e) => e.pos.distanceTo(S.pos) + (e.hostile ? 0 : 1e4);
-  const enemies = G.enemies.ships.filter((e) => e.alive).sort((a, b) => rank(a) - rank(b));
+  const enemies = G.enemies.ships.filter((e) => e.alive);
+  if (G.kraken.targetable) enemies.push(G.kraken.target); // the Kraken's head (kraken.js)
+  enemies.sort((a, b) => rank(a) - rank(b));
   for (const c of S.cannons) {
     if (c.manual) { c.inArc = false; c.targetHostile = false; continue; } // a player is laying this one by hand
     c.inArc = false; c.targetHostile = false;
@@ -390,6 +394,7 @@ function simulate(dt) {
     G.voyages.update(dt);
     G.island.update(dt, t);
     G.enemies.update(dt, t);
+    G.kraken.update(dt, t);
     G.grapples.checkPrize();
     aimPlayerCannons();
     G.crew.update(dt, t);
@@ -444,6 +449,7 @@ function view(dt) {
   G.guest.update(dt);
   G.damage.view(dt);
   G.island.view(dt);
+  G.kraken.view(dt);
   camera.getWorldPosition(_a);
   G.weather.update(dt, t, _a);
   G.world.update(t, S.pos, _a);

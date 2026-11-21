@@ -42,6 +42,7 @@ export class Mirror {
     this.damage(snap.damage);
     this.grapple(snap.grapple);
     this.G.island.applySnap(snap.island, this);
+    G.kraken.applySnap(snap.kraken);
 
     G.state = snap.state; G.score = snap.score; G.crew.order = snap.order;
     const V = G.voyages, sv = snap.voyage;

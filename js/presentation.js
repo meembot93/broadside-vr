@@ -130,6 +130,55 @@ export function wirePresentation(G) {
       if (i % 3 === 2) { G.crew.cheer(); audio.cheer(); }
     }, 600 + i * 650);
   });
+  // ---- The Kraken (kraken.js) ----
+  const ink = (pos, n = 14) => {
+    for (let i = 0; i < n; i++) fx.emit(pos, { vel: new THREE.Vector3((Math.random() - 0.5) * 6, Math.random() * 6, (Math.random() - 0.5) * 6), life: 0.6 + Math.random() * 0.8, s0: 0.25, s1: 0.9, color: 0x2a0a26, grav: 9, alpha: 0.9 });
+  };
+  const shake = (amt, ms) => { for (const h of me.hands) me.haptic(h, amt, ms); };
+  on('krakenStirs', ({ pos }) => {
+    hud.msg('The sea is boiling... something huge stirs below!', 4);
+    audio.roar(pos, false); shake(0.4, 400);
+  });
+  on('krakenRises', ({ pos, first }) => {
+    fx.splash(pos, 3); fx.splash(pos.clone().add(_a.set(3, 0, 2)), 2); audio.splash(pos, 3); audio.roar(pos, true); shake(0.8, 600);
+    if (first) {
+      hud.msg('THE KRAKEN!', 4);
+      hud.msg('Cannons on its head! Cutlass on its arms!', 4.5);
+      hud.msg('A shadow on deck means an arm is coming down: move!', 4.5);
+    } else hud.msg('It’s back up on the other side! Man those guns!', 3.5);
+  });
+  on('tentacleRises', ({ pos }) => { fx.splash(pos, 1.2); audio.splash(pos, 1.2); });
+  on('tentacleGrabs', ({ pos }) => { audio.woodHit(pos); audio.creak(pos); once('grab', () => hud.msg('It’s got hold of the ship! Cut it loose!', 3)); });
+  on('tentacleSqueeze', ({ pos }) => { audio.creak(pos); audio.woodHit(pos); fx.debris(pos, 6); shake(0.3, 150); });
+  on('tentacleRaised', ({ pos, player }) => {
+    audio.swoosh(pos);
+    if (player === me.id) sometimes('raised', 12, () => hud.msg('Look out above! Move!', 2));
+  });
+  on('tentacleSlam', ({ pos }) => {
+    fx.debris(pos, 22); fx.splash(pos, 0.8); audio.thud(pos); audio.woodHit(pos); audio.cannon(pos);
+    if (me.ship === G.ship) shake(1, 250);
+  });
+  on('tentacleLash', ({ pos }) => { audio.swoosh(pos); audio.thud(pos); fx.hit(pos); });
+  on('tentacleHit', ({ pos }) => { ink(pos, 6); audio.thud(pos); });
+  on('tentacleSevered', ({ pos }) => {
+    ink(pos, 26); fx.splash(pos, 0.6); audio.thud(pos); audio.roar(pos, false);
+    sometimes('severed', 15, () => hud.msg('Cut it off! It’ll grow back...', 2.5));
+  });
+  on('krakenHit', ({ pos, hp, max }) => {
+    ink(pos, 10); fx.flash(pos, 2); audio.thud(pos);
+    if (Math.random() < 0.35) audio.roar(pos, false);
+    if (hp < max * 0.2) sometimes('krakenWeak', 20, () => hud.msg('The Kraken is weakening! Keep firing!', 2.5));
+  });
+  on('krakenDives', ({ pos }) => {
+    fx.splash(pos, 2.5); audio.splash(pos, 2.5); audio.roar(pos, true);
+    hud.msg('It’s diving! Watch the other side!', 3.5);
+  });
+  on('krakenSlain', ({ pos }) => {
+    fx.splash(pos, 3); ink(pos, 40); fx.smoke(pos, _a.set(0, 1, 0), 16, 2); audio.roar(pos, true); audio.splash(pos, 3);
+    hud.msg('THE KRAKEN IS SLAIN!', 4.5);
+    G.crew.cheer(); audio.cheer(); shake(0.6, 500);
+  });
+
   on('shipRefitted', () => hud.msg('Ship refitted: hull patched, crew rested', 3.5));
 
   // ---- Treasure hunts (island.js) ----

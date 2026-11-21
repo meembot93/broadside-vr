@@ -104,6 +104,15 @@ export class Sound {
     this.tone(o, { f: 160, f2: 70, peak: 0.7, a: 0.002, d: 0.18 });
     this.noise(o, { f: 600, peak: 0.5, a: 0.002, d: 0.15 });
   }
+  // The Kraken: a deep, rumbling bellow (long = its roar, short = a grunt when hurt)
+  roar(pos, long = true) {
+    if (!this.ctx) return; const o = this.out(pos, long ? 3 : 1.6, 12, 0.5);
+    const d = long ? 2.4 : 0.7;
+    this.tone(o, { type: 'sawtooth', f: 62, f2: 34, peak: 0.55, a: 0.25, d });
+    this.tone(o, { type: 'sawtooth', f: 93, f2: 47, peak: 0.3, a: 0.3, d: d * 0.9 });
+    this.tone(o, { type: 'square', f: 41, f2: 30, peak: 0.25, a: 0.2, d });
+    this.noise(o, { type: 'bandpass', f: 300, f2: 90, q: 1.2, peak: 0.7, a: 0.2, d });
+  }
   swoosh(pos) {
     if (!this.ctx) return; const o = this.out(pos, 0.5);
     this.noise(o, { type: 'bandpass', f: 500, f2: 2200, q: 1.5, peak: 0.5, a: 0.06, d: 0.18 });
