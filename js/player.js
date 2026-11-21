@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { halfWidth, RACK, WHEEL_MAX, BALL_SPEED } from './ship.js';
+import { halfWidth, RACK, WHEEL_MAX, BALL_SPEED, QUARTER, STAIRS, deckFloor } from './ship.js';
 import { waveHeight } from './waves.js';
 import { GRAPPLE_RANGE } from './grapple.js';
 import { ORDER_TEXT } from './crew.js';
@@ -222,6 +222,7 @@ export class Player {
       consider('cannon', _a.distanceTo(_p), 0.6, { c, point: c.breech.getWorldPosition(new THREE.Vector3()) });
     }
     this.G.island?.targets(this, _a, consider); // ashore: the treasure chest and the prize cards
+    this.G.swing?.targets(this, _a, consider);  // lashed alongside: the boarding rope
     return best;
   }
 
@@ -265,6 +266,7 @@ export class Player {
       return;
     }
     if (t.kind === 'keg') { this.lightKeg(h); return; }
+    if (t.kind === 'rope') { this.G.swing.start(this, t.lock, h); return; }
     if (t.kind === 'chest' || t.kind === 'card') { this.useTreasure(h, t); return; }
     if (t.kind === 'ladder' || t.kind === 'oar') { this.G.island.boat.grab(this, h, t); return; }
     if (t.kind === 'grapple') {
@@ -293,6 +295,7 @@ export class Player {
 
   release(h) {
     const it = h.held;
+    if (it === 'rope' && this.swinging) return; // you hang on till you land (swing.js)
     if (it === 'ladder' || it === 'oar') { this.G.island.boat.release(this, h); h.held = null; h.glove.visible = true; return; }
     if (it === 'grapple') this.G.act({ type: 'holdGrapple', hold: false });
     if (it === 'cannon' && h.cannon) { this.G.act({ type: 'releaseCannon', cannon: h.cannon.id }); h.cannon = null; }
@@ -331,6 +334,7 @@ export class Player {
       else if (t.kind === 'wheel') text = 'GRIP to steer';
       else if (t.kind === 'lever') text = 'GRIP and push:\nmore sail';
       else if (t.kind === 'grapple') text = this.G.grapples.anyLineOut() ? 'GRIP, TRIGGER:\ncut the lines' : 'GRIP, then move\nyour hand to aim';
+      else if (t.kind === 'rope') text = 'GRIP to swing\nacross!';
       else if (t.kind === 'keg') text = 'TRIGGER to light\nthe powder keg';
       else if (t.kind === 'cannon') text = this.G.ship.cannonReady(t.c) ? 'TRIGGER to fire!\nGRIP to aim it' : `Reloading... ${Math.ceil(t.c.reload)}`;
     }
@@ -536,7 +540,7 @@ export class Player {
   }
 
   move(x, y, dt) {
-    if (this.climb) return;
+    if (this.climb || this.swinging) return;
     if (this.ship.isBoat && this.G.island.boat.stick(this, x, y, dt)) return; // in the longboat the stick rows
     if (Math.abs(x) < 0.15 && Math.abs(y) < 0.15) return;
     const ship = this.ship;
@@ -557,17 +561,20 @@ export class Player {
     this.dolly.rotation.y += a;
   }
 
-  // Keep the player's head over the deck (and out of the masts).
+  // Keep the player's head over the deck (and out of the masts). The stairs at the back climb
+  // to the quarterdeck: the floor rises under you as you walk up them (ship.js deckFloor).
   clampToDeck(depth = 0) {
     const ship = this.ship;
     if (ship.isShore) { this.G.island.clampWalker(this); return; } // ashore: on dry land, feet on the ground
     if (this.climb) { this.G.island.boat.clampClimber(this, this.lastDt); return; } // on the rope ladder (rowboat.js)
     if (ship.isBoat) { this.G.island.boat.clampRider(this); return; } // in the longboat
+    if (this.swinging) { this.G.swing.carry(this, this.lastDt || 1 / 72); return; } // on the boarding rope (swing.js)
     this.dolly.updateMatrixWorld(true);
     this.G.camera.getWorldPosition(_a); ship.root.worldToLocal(_a);
+    const floorNow = this.dolly.position.y, up = floorNow > 1.2;
     // Lashed alongside another ship: you can climb over the rail onto her deck
     const other = this.G.grapples?.linkedShip(ship);
-    if (other && Math.abs(_a.x) > halfWidth(clamp(_a.z, -8.6, 6.95)) - 0.45) {
+    if (other && floorNow < 0.6 && Math.abs(_a.x) > halfWidth(clamp(_a.z, -8.6, 6.95)) - 0.45) {
       this.G.camera.getWorldPosition(_b); other.root.worldToLocal(_b);
       const hwO = halfWidth(clamp(_b.z, -8.6, 6.95));
       if (_b.z > -8.6 && _b.z < 6.95 && Math.abs(_b.x) < hwO + 1.6) {
@@ -576,14 +583,30 @@ export class Player {
         return;
       }
     }
-    let x = _a.x, z = clamp(_a.z, -8.6, 6.95);
-    const hw = Math.max(0.2, halfWidth(z) - 0.45); x = clamp(x, -hw, hw);
+    const Q = QUARTER, ST = STAIRS, inCol = (v) => Math.abs(v) >= ST.x0 + 0.06; // over a stair (or outboard of the rail posts)
+    let x = _a.x, z = Math.max(-8.6, _a.z);
+    if (up) {
+      // On the quarterdeck: the stern rail behind, the balustrade in front except at the stairs
+      z = Math.min(z, Q.z1 - 0.35);
+      if (!inCol(x)) z = Math.max(z, Q.z0 + 0.25);
+    } else if (!inCol(x)) z = Math.min(z, Q.z0 - 0.3); // the cabin front
+    else z = Math.min(z, Q.z1 - 0.35);
+    // The stairs' hand rail: no stepping on or off them sideways halfway up
+    const prevIn = inCol(this.headLocal.x);
+    if (z > ST.z0 + 0.35 && z < Q.z0) {
+      if (prevIn && !inCol(x)) x = Math.sign(x || 1) * (ST.x0 + 0.07);
+      else if (!prevIn && !up && inCol(x)) x = Math.sign(x || 1) * (ST.x0 + 0.05);
+    }
+    const hw = z >= Q.z0 ? Q.x - 0.3 : Math.max(0.2, halfWidth(z) - (z > 6 ? 0.2 : 0.45)); x = clamp(x, -hw, hw);
     for (const mz of [-1, -6.5]) {
       const dx = x, dz = z - mz, d = Math.hypot(dx, dz);
       if (d < 0.45) { const k = d > 1e-4 ? 0.45 / d : 1; x = dx * k || 0.45; z = mz + dz * k; }
     }
-    this.dolly.position.x += x - _a.x; this.dolly.position.z += z - _a.z;
-    this.headLocal.set(x, _a.y, z);
+    // Feet follow the deck height under the head (a quick ease, so stairs feel like a smooth ramp)
+    const fl = deckFloor(x, z), dt = this.lastDt || 1 / 72;
+    const y = Math.abs(fl - floorNow) < 0.005 ? fl : floorNow + (fl - floorNow) * (1 - Math.exp(-14 * dt));
+    this.dolly.position.x += x - _a.x; this.dolly.position.z += z - _a.z; this.dolly.position.y = y;
+    this.headLocal.set(x, _a.y + y - floorNow, z);
   }
 
   updateVR(dt) {
@@ -698,6 +721,7 @@ export class Player {
   deskUse() {
     const G = this.G, it = this.deskItem;
     if (G.island?.deskUse(this)) return; // ashore: open the chest, take a prize
+    if (G.swing.deskTry(this)) return;     // lashed alongside: click the rope to swing across
     const keg = this.ship.keg;
     if (keg && keg.fuse === -1 && keg.obj.visible) {
       G.camera.getWorldPosition(_a); keg.obj.getWorldPosition(_b); _b.y += 0.5;
@@ -724,7 +748,7 @@ export class Player {
     G.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
     const f = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0), s = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0);
     const rowing = this.ship.isBoat && G.island.boat.stick(this, s, -f, dt);
-    if ((f || s) && !rowing && !this.climb) {
+    if ((f || s) && !rowing && !this.climb && !this.swinging) {
       const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw);
       const sp = 3 * dt / Math.hypot(f, s);
       this.dolly.position.x += (fx * f + -fz * s) * sp;
@@ -847,7 +871,7 @@ export class Player {
   }
 
   respawn() {
-    this.climb = false; this.autoClimb = 0;
+    this.swinging = null; this.climb = false; this.autoClimb = 0;
     if (this.ship !== this.G.ship) { this.G.ship.root.add(this.dolly); this.ship = this.G.ship; }
     for (const h of this.hands) { this.release(h); h.evTrig = h.evSq = false; }
     this.unbelt();
