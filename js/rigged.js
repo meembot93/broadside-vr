@@ -13,8 +13,17 @@ import { Kit, addCutlass } from './kit.js';
 // Each model file can be shown in colour variations (bandana / clothes and hair), done on the
 // graphics card from one shared texture, so a variation costs no extra memory.
 
+// clipSpeed: how fast the walk clip moves them (m/s); armDrop: models made in an A-pose
+// (arms out at an angle, no clips) have their arms lowered by this much (radians).
+const url = (f) => new URL('../models/' + f, import.meta.url).href;
 export const MODELS = {
-  lady: { url: new URL('../models/tripo-pirate.glb', import.meta.url).href, clipSpeed: 1.3 },
+  lady: { url: url('tripo-pirate.glb'), clipSpeed: 1.3 },
+  // Made in Blender from code (see docs/CHARACTERS.md), A-pose, no clips:
+  hawkins: { url: url('pirates/hawkins.glb'), armDrop: 0.56 },
+  bones: { url: url('pirates/bones.glb'), armDrop: 0.56 },
+  captain: { url: url('pirates/captain.glb'), armDrop: 0.56 },
+  deckhand: { url: url('pirates/deckhand.glb'), armDrop: 0.56 },
+  lass: { url: url('pirates/lass.glb'), armDrop: 0.56 },
 };
 const loaded = {};
 
@@ -100,9 +109,16 @@ export function makeRigged(name, look = {}, type = name) {
   // The head: an empty that follows the head bone (things are attached to / measured from it)
   const head = new THREE.Group(); head.position.y = 0.1; bones.head.add(head);
   const p = { g, body, legL, legR, armL, armR, head, type, phase: Math.random() * 6, attack: -1, cheer: 0, pose: null, dead: false, deadT: 0, lookT: 0,
-    rig: { name, model, bones, mixer, acts, cur: null, al: 0, ar: 0, legs: 0, lean: 0, last: null, speed: 0, clipSpeed: MODELS[name].clipSpeed } };
-  // Start in the idle pose (and at a random point in it, so a crowd doesn't move in step)
-  play(p, 'idle'); mixer.update(Math.random() * 3);
+    rig: { name, model, bones, mixer, acts, cur: null, al: 0, ar: 0, legs: 0, lean: 0, last: null, speed: 0, clipSpeed: MODELS[name].clipSpeed || 1.3,
+      clips: !!acts.idle, drop: MODELS[name].armDrop || 0, rest: null, step: Math.random() * 6 } };
+  if (p.rig.clips) {
+    // Start in the idle pose (and at a random point in it, so a crowd doesn't move in step)
+    play(p, 'idle'); mixer.update(Math.random() * 3);
+  } else {
+    // No clips: remember the rest pose (moves are worked out from it every frame)
+    p.rig.rest = Object.values(bones).map((bn) => [bn, bn.quaternion.clone(), bn.position.clone()]);
+    armsDown(p);
+  }
   // The cutlass, gripped in the right hand: lined up so that with the arm hanging down
   // the blade points forward, as on the low-poly pirates.
   const hand = bones.handR;
@@ -135,6 +151,37 @@ function turnBone(p, bone, Q) {
   bone.quaternion.premultiply(_q2);
 }
 const _Q = new THREE.Quaternion();
+// Lower A-pose arms to hang at the sides (models without clips)
+function armsDown(p, extraL = 0, extraR = 0) {
+  const R = p.rig; if (!R.drop) return;
+  turnBone(p, R.bones.upperarmL, _Q.setFromEuler(_e.set(0, 0, R.drop + extraL)));
+  turnBone(p, R.bones.upperarmR, _Q.setFromEuler(_e.set(0, 0, -R.drop - extraR)));
+}
+// Base pose for models without clips: rest pose, arms down, a walk cycle or gentle breathing.
+// Returns the arm swing to add (radians, + = forward) for the left and right arm.
+function procedural(p, dt, walking, t) {
+  const R = p.rig, b = R.bones;
+  for (const [bn, q, ps] of R.rest) { bn.quaternion.copy(q); bn.position.copy(ps); }
+  if (walking) R.step += dt * R.speed / 1.25 * Math.PI * 2; // one stride (two steps) per 1.25 m
+  const w = walking ? 1 : 0;
+  R.walkW = (R.walkW || 0) + (w - (R.walkW || 0)) * Math.min(1, dt * 6);
+  const W = R.walkW, s = Math.sin(R.step), c = Math.cos(R.step);
+  // breathing and a slow look about
+  turnBone(p, b.chest, _Q.setFromEuler(_e.set(Math.sin(t * 1.6 + R.step) * 0.02 * (1 - W), Math.sin(t * 0.35 + p.phase) * 0.05 * (1 - W), 0)));
+  turnBone(p, b.head, _Q.setFromEuler(_e.set(0, Math.sin(t * 0.27 + p.phase * 2) * 0.25 * (1 - W), 0)));
+  armsDown(p, 0.06 * (1 - W) * Math.sin(t * 1.1 + p.phase), 0.06 * (1 - W) * Math.sin(t * 1.3));
+  if (W > 0.01) {
+    // legs: swing from the hip, bend the knee on the way through, a little bob and sway
+    turnBone(p, b.thighL, _Q.setFromEuler(_e.set(s * 0.5 * W, 0, 0)));
+    turnBone(p, b.thighR, _Q.setFromEuler(_e.set(-s * 0.5 * W, 0, 0)));
+    turnBone(p, b.shinL, _Q.setFromEuler(_e.set(-Math.max(0, c) * 0.85 * W, 0, 0)));
+    turnBone(p, b.shinR, _Q.setFromEuler(_e.set(-Math.max(0, -c) * 0.85 * W, 0, 0)));
+    turnBone(p, b.hips, _Q.setFromEuler(_e.set(0, s * 0.12 * W, 0)));
+    turnBone(p, b.chest, _Q.setFromEuler(_e.set(0.04 * W, -s * 0.18 * W, 0)));
+    b.hips.position.y += Math.abs(c) * 0.025 * W - 0.012 * W;
+  }
+  return [-s * 0.4 * W, s * 0.4 * W];
+}
 const qx = (a) => _Q.setFromEuler(_e.set(a, 0, 0));
 const qxz = (a, z) => _Q.setFromEuler(_e.set(a, 0, z));
 
@@ -151,18 +198,24 @@ export function animateRigged(p, dt, moving, t = 0) {
   if (p.dead) {
     p.deadT += dt;
     const u = Math.min(1, p.deadT / 0.6);
-    play(p, 'idle', 0.2);
-    if (R.cur) R.cur.timeScale = Math.max(0, 1 - u * 2);
-    R.mixer.update(dt);
+    if (R.clips) {
+      play(p, 'idle', 0.2);
+      if (R.cur) R.cur.timeScale = Math.max(0, 1 - u * 2);
+      R.mixer.update(dt);
+    } else procedural(p, 0, false, 0);
     p.body.rotation.x = -u * u * Math.PI * 0.48;
     R.al += (-1.2 - R.al) * Math.min(1, dt * 6); R.ar = R.al;
     turnBone(p, b.upperarmL, qxz(R.al, -0.3)); turnBone(p, b.upperarmR, qxz(R.ar, 0.3));
     return;
   }
   const walking = moving && R.speed > 0.15;
-  if (walking) { play(p, 'walk'); R.cur.timeScale = Math.max(0.5, R.speed / R.clipSpeed); }
-  else { play(p, 'idle'); if (R.cur) R.cur.timeScale = 1; }
-  R.mixer.update(dt);
+  let sw = [0, 0];
+  if (!R.clips) sw = procedural(p, dt, walking, t);
+  else {
+    if (walking) { play(p, 'walk'); R.cur.timeScale = Math.max(0.5, R.speed / R.clipSpeed); }
+    else { play(p, 'idle'); if (R.cur) R.cur.timeScale = 1; }
+    R.mixer.update(dt);
+  }
 
   // Extra arm swing on top of the clip (0 = leave the clip's arms alone)
   let al = 0, ar = 0, lean = 0, legs = 0, armOut = 0;
@@ -197,7 +250,8 @@ export function animateRigged(p, dt, moving, t = 0) {
   R.legs += (legs - R.legs) * k;
   R.lean += (lean - R.lean) * k;
   p.body.rotation.x = R.lean;
-  if (Math.abs(R.al) > 1e-3) turnBone(p, b.upperarmL, qxz(R.al, -armOut));
-  if (Math.abs(R.ar) > 1e-3) turnBone(p, b.upperarmR, qxz(R.ar, armOut));
+  const al2 = R.al + sw[0] * (1 - Math.min(1, Math.abs(R.al))), ar2 = R.ar + sw[1] * (1 - Math.min(1, Math.abs(R.ar)));
+  if (Math.abs(al2) > 1e-3 || armOut) turnBone(p, b.upperarmL, qxz(al2, -armOut));
+  if (Math.abs(ar2) > 1e-3 || armOut) turnBone(p, b.upperarmR, qxz(ar2, armOut));
   if (R.legs > 1e-3) { turnBone(p, b.thighL, qx(R.legs)); turnBone(p, b.thighR, qx(R.legs)); turnBone(p, b.shinL, qx(-R.legs)); turnBone(p, b.shinR, qx(-R.legs)); }
 }

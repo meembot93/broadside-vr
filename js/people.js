@@ -284,7 +284,7 @@ export const PERSON_DETAIL = 2;
 // classic ones instead (same seed, so the same pirate always gets the same stand-in).
 export const PEOPLE = { adult: false };
 const STAND_IN = {
-  rogue: { type: 'swashbuckler', vest: 0x5a2a3a },
+  rogue: { type: 'swashbuckler', vest: 0x5a2a3a, hair: 0x3a2214 },
   raider: { type: 'deckhand', bandana: 0xc8a040 },
   buccaneer: { type: 'swashbuckler', vest: 0x6a1a1a },
 };
@@ -292,6 +292,7 @@ const LOD_DIST = 9;
 
 // Types drawn with a high-detail model from models/ (rigged.js) in the Adults setting, once
 // it has loaded: [model, colour variation]. Their cutlass and colours come from the options.
+const MODEL_FOR = { captain: 'captain', gunner: 'bones', deckhand: 'deckhand', sailor: 'deckhand', swashbuckler: 'lass', officer: 'lass' };
 const RIGGED = {
   buccaneer: ['lady', {}],
   raider: ['lady', { hair: 0x9a3e1c, red: 0x1c1a1e }],
@@ -299,12 +300,18 @@ const RIGGED = {
 };
 
 export function makePerson(o = {}) {
-  const rig = PEOPLE.adult && RIGGED[o.type];
-  if (rig && hasModel(rig[0])) {
-    const look = { ...rig[1], cutlass: !!o.cutlass };
-    if (o.bandana !== undefined) look.red = o.bandana;
-    if (o.hair !== undefined) look.hair = o.hair;
-    return makeRigged(rig[0], look, o.type);
+  {
+    const t = !PEOPLE.adult && STAND_IN[o.type] ? STAND_IN[o.type].type : o.type;
+    const rig = o.model ? [o.model, {}] : (PEOPLE.adult && RIGGED[t]) || (MODEL_FOR[t] && [MODEL_FOR[t], {}]);
+    if (rig && hasModel(rig[0])) {
+      const look = { ...rig[1], cutlass: !!o.cutlass };
+      // colour variations: bandana (or a captain's coat) and hair
+      const red = o.bandana ?? (rig[0] === 'captain' ? o.coat : undefined);
+      if (red != null) look.red = red;
+      if (o.hair !== undefined && typeof o.hair === 'number') look.hair = o.hair;
+      if (!PEOPLE.adult && STAND_IN[o.type]?.hair) look.hair = STAND_IN[o.type].hair;
+      return makeRigged(rig[0], look, o.type);
+    }
   }
   if (!PEOPLE.adult && STAND_IN[o.type]) o = { ...o, ...STAND_IN[o.type] };
   const R = rng(o.seed ?? Math.floor(Math.random() * 1e9));
