@@ -286,7 +286,7 @@ export const PEOPLE = { adult: false };
 const STAND_IN = {
   rogue: { type: 'swashbuckler', vest: 0x5a2a3a, hair: 0x3a2214 },
   raider: { type: 'deckhand', bandana: 0xc8a040 },
-  buccaneer: { type: 'swashbuckler', vest: 0x6a1a1a },
+  buccaneer: { type: 'swashbuckler', vest: 0x6a1a1a, model: 'goldie' }, // blonde, so the crew has a blonde and a brunette
 };
 const LOD_DIST = 9;
 
@@ -302,7 +302,8 @@ const RIGGED = {
 export function makePerson(o = {}) {
   {
     const t = !PEOPLE.adult && STAND_IN[o.type] ? STAND_IN[o.type].type : o.type;
-    const rig = o.model ? [o.model, {}] : (PEOPLE.adult && RIGGED[t]) || (MODEL_FOR[t] && [MODEL_FOR[t], {}]);
+    const kidsModel = !PEOPLE.adult && STAND_IN[o.type]?.model;
+    const rig = o.model ? [o.model, {}] : kidsModel ? [kidsModel, {}] : (PEOPLE.adult && RIGGED[t]) || (MODEL_FOR[t] && [MODEL_FOR[t], {}]);
     if (rig && hasModel(rig[0])) {
       const look = { ...rig[1], cutlass: !!o.cutlass };
       // colour variations: bandana (or a captain's coat) and hair

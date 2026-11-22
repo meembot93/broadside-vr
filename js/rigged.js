@@ -24,6 +24,7 @@ export const MODELS = {
   captain: { url: url('pirates/captain.glb'), armDrop: 0.56 },
   deckhand: { url: url('pirates/deckhand.glb'), armDrop: 0.56 },
   lass: { url: url('pirates/lass.glb'), armDrop: 0.56 },
+  goldie: { url: url('pirates/goldie.glb'), armDrop: 0.56 }, // the blonde lass
 };
 const loaded = {};
 
