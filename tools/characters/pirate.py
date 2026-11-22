@@ -239,15 +239,17 @@ def pirate(o):
         P(Fn(hairmask, (-0.13, hy - 0.1, -0.14), (0.13, hy + 0.15, 0.12), color=_hairc(hc, 300), k=0.006, ck=0.002, disp=_strands(0.002, 500)))
         if O['hair_style'] == 'long':
             P(Ellipsoid((0, hy - 0.07, -0.07), (0.085, 0.1, 0.045), color=_hairc(hc, 300), k=0.03, disp=_strands(0.003, 400)))
-        if O['hair_style'] == 'braid':
+        if O['hair_style'] in ('braid', 'twinbraids'):
             # a thick plait from behind the right ear, over the shoulder and down the front
-            pts = [(-0.075, hy - 0.02, -0.04), (-0.1, hy - 0.1, 0.0), (-0.11, hy - 0.17, 0.05), (-0.1, hy - 0.25, 0.08), (-0.09, hy - 0.33, 0.09), (-0.085, hy - 0.4, 0.09)]
-            for i in range(len(pts) - 1):
-                a, b = np.array(pts[i]), np.array(pts[i + 1])
-                for kk in range(3):
-                    c = a + (b - a) * (kk + 0.5) / 3
-                    P(Ellipsoid(c, (0.024 - i * 0.002, 0.03, 0.022 - i * 0.002), color=_hairc(hc, 300), k=0.006, disp=_strands(0.0015, 600)))
-            P(Ellipsoid((-0.085, hy - 0.41, 0.09), (0.014, 0.012, 0.014), color=O['trim'] or 0xa82020, k=0.004))
+            # (twinbraids: one each side)
+            for sx in ((1, -1) if O['hair_style'] == 'twinbraids' else (1,)):
+                pts = [(-0.075 * sx, hy - 0.02, -0.04), (-0.1 * sx, hy - 0.1, 0.0), (-0.11 * sx, hy - 0.17, 0.05), (-0.1 * sx, hy - 0.25, 0.08), (-0.09 * sx, hy - 0.33, 0.09), (-0.085 * sx, hy - 0.4, 0.09)]
+                for i in range(len(pts) - 1):
+                    a, b = np.array(pts[i]), np.array(pts[i + 1])
+                    for kk in range(3):
+                        c = a + (b - a) * (kk + 0.5) / 3
+                        P(Ellipsoid(c, (0.024 - i * 0.002, 0.03, 0.022 - i * 0.002), color=_hairc(hc, 300), k=0.006, disp=_strands(0.0015, 600)))
+                P(Ellipsoid((-0.085 * sx, hy - 0.41, 0.09), (0.014, 0.012, 0.014), color=O['trim'] or 0xa82020, k=0.004))
         if O['hair_style'] == 'ponytail':
             P(Cone((0, hy, -0.11), (0, hy - 0.17, -0.12), 0.03, 0.018, color=_hairc(hc, 300), k=0.02, disp=_strands(0.002, 500)))
 

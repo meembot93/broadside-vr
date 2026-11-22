@@ -22,12 +22,14 @@ const HELM_STANDBY = [1.75, 4.3];
 export class Crew {
   constructor(G) {
     this.G = G;
-    // A small crew: Hawkins at the helm, Bones on the guns (either side) and Mags, the bosun,
-    // who also mans the grapple gun when you order "bring us alongside".
+    // A small crew: Hawkins at the helm, Bones on the guns (either side), Mags, the bosun (blonde),
+    // who also mans the grapple gun when you order "bring us alongside", and Rosa (brunette),
+    // who looks after the starboard guns.
     const defs = [
       { look: { type: 'sailor', model: 'hawkins', vest: 0x24304a, hat: 0x3a2a20, beard: 0x8a8a8a, patch: false, seed: 15 }, role: 'helmsman', side: 0, home: HELM_STANDBY, name: 'Hawkins' },
       { look: { type: 'gunner', bandana: 0xa82020, pants: 0x3b4a6b, hair: 0x3a2414, seed: 11 }, role: 'gunner', side: 0, home: [-1.15, -1.6], name: 'Bones' },
       { look: { type: 'buccaneer', seed: 14 }, role: 'bosun', side: 0, home: [-1.5, 3.1], name: 'Mags' },
+      { look: { type: 'rogue', seed: 21 }, role: 'gunner', side: 1, home: [1.2, 1.6], name: 'Rosa' },
     ];
     this.defs = defs;
     this.members = defs.map((d, i) => {
