@@ -5,7 +5,7 @@
 </head><body>
 <script type="module">
 // Dev page: the high-detail (rigged) pirates side by side, animated.
-// ?types=buccaneer,raider,rogue  ?kids  ?pose=steer|haul|ram|aim|point|sit|row|walk|attack|cheer|dead
+// ?types=buccaneer,raider,m:hawkins (m:NAME = a model from rigged.js MODELS)  ?kids  ?pose=steer|haul|ram|aim|point|sit|row|walk|attack|cheer|dead
 // ?view=front|back|side|close  ?i=N (close-up of the Nth)  ?t=seconds to run before the picture
 import * as THREE from 'three';
 import { makePerson, animatePerson, PEOPLE } from '../js/people.js';
@@ -23,7 +23,7 @@ const cam = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.05, 100)
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshLambertMaterial({ color: 0x9a7a52 })); floor.rotation.x = -Math.PI / 2; scene.add(floor);
 const list = (q.get('types') || 'buccaneer,raider,rogue').split(',');
 const people = list.map((t, i) => {
-  const p = makePerson({ type: t, seed: 100 + i, cutlass: pose === 'attack' || q.has('sword') });
+  const p = makePerson({ type: t, model: t.startsWith('m:') ? t.slice(2) : undefined, seed: 100 + i, cutlass: pose === 'attack' || q.has('sword') });
   p.g.position.x = (i - (list.length - 1) / 2) * 1.0; scene.add(p.g);
   if (pose && !['walk', 'attack', 'cheer', 'dead'].includes(pose)) p.pose = pose;
   return p;
@@ -31,9 +31,9 @@ const people = list.map((t, i) => {
 let tri = 0; scene.traverse((o) => { if (o.isMesh && o !== floor) tri += o.geometry.index ? o.geometry.index.count / 3 : o.geometry.attributes.position.count / 3; });
 window.stats = { tri: Math.round(tri / people.length) };
 const W = (list.length * 1.0) / 2 + 0.6;
-const views = { front: [0, 1.0, -W * 2.3, 0, 0.9, 0], back: [0, 1.0, W * 2.3, 0, 0.9, 0], side: [-W * 2.0, 1.0, -W * 1.0, 0, 0.9, 0], close: [0, 1.55, -1.5, 0, 1.45, 0] };
+const views = { front: [0, 1.0, -W * 2.3, 0, 0.9, 0], back: [0, 1.0, W * 2.3, 0, 0.9, 0], side: [-W * 2.0, 1.0, -W * 1.0, 0, 0.9, 0], close: [0, 1.55, -1.5, 0, 1.45, 0], half: [0, 1.25, -2.6, 0, 1.15, 0] };
 const v = views[view]; cam.position.set(v[0], v[1], v[2]); cam.lookAt(v[3], v[4], v[5]);
-if (view === 'close') { const p = people[+(q.get('i') || 0)]; cam.position.x = p.g.position.x; cam.lookAt(p.g.position.x, 1.45, 0); }
+if (view === 'close' || view === 'half') { const p = people[+(q.get('i') || 0)]; cam.position.x = p.g.position.x; cam.lookAt(p.g.position.x, 1.45, 0); }
 // Run the animation for ?t seconds (fixed steps), then draw
 const T = +(q.get('t') || 1.2), dt = 1 / 60;
 let t = 0;
